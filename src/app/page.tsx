@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showHint, setShowHint] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -19,6 +20,13 @@ export default function Home() {
 
   const handleHintClick = () => {
     setShowHint(true);
+  };
+
+  const handleSendClick = () => {
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsLoading(false);
+    }, 3000);
   };
 
   return (
@@ -63,7 +71,17 @@ export default function Home() {
           {showHint && (
             <div className="flex justify-start mb-6">
               <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-lg shadow-sm max-w-lg">
-                <p>💡 Hint: Think about how a tree structure splits data into smaller halves!</p>
+                <p>Hint: Think about how a tree structure splits data into smaller halves!</p>
+              </div>
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="flex justify-start mb-6">
+              <div className="bg-white border border-slate-200 p-4 rounded-lg shadow-sm flex items-center gap-2">
+                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
+                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
               </div>
             </div>
           )}
@@ -73,10 +91,10 @@ export default function Home() {
           <div className="flex gap-2 max-w-4xl mx-auto">
             <button 
               onClick={handleHintClick}
-              className="bg-amber-100 text-amber-700 px-4 py-3 rounded-lg font-medium hover:bg-amber-200 transition flex items-center gap-2"
+              className="bg-amber-100 text-amber-700 px-4 py-3 rounded-lg font-medium hover:bg-amber-200 transition"
               title="Need a hint?"
             >
-              💡 Hint
+              Hint
             </button>
 
             <input 
@@ -85,7 +103,10 @@ export default function Home() {
               className="flex-1 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
             />
             
-            <button className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition">
+            <button 
+              onClick={handleSendClick}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition"
+            >
               Send
             </button>
           </div>
