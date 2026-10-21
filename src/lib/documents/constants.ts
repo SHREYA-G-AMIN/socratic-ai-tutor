@@ -35,3 +35,9 @@ export const MAX_IMAGE_SIZE = 16_777_216;
 
 /** Time budget for a single extraction, in milliseconds. */
 export const EXTRACTION_TIMEOUT_MS = 20_000;
+
+/** Default maximum number of characters in a chunk (roughly 250 tokens). */
+export const DEFAULT_CHUNK_SIZE = 1000;
+
+/** Default number of characters that consecutive chunks share (20% of a chunk). */
+export const DEFAULT_CHUNK_OVERLAP = 200;

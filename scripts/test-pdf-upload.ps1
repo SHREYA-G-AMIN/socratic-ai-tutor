@@ -233,10 +233,37 @@ Write-Result -Name "rejects a file over 10 MB" `
     -Ok ($response.StatusCode -eq 413 -and $code -eq "FILE_TOO_LARGE") `
     -Details "status $($response.StatusCode), code $code"
 
+$noTextFile = Join-Path $workDirectory "no-text.pdf"
+$noTextPdf = "%PDF-1.4`n" +
+"1 0 obj`n<< /Type /Catalog /Pages 2 0 R >>`nendobj`n" +
+"2 0 obj`n<< /Type /Pages /Kids [3 0 R] /Count 1 >>`nendobj`n" +
+"3 0 obj`n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << >> /Contents 4 0 R >>`nendobj`n" +
+"4 0 obj`n<< /Length 0 >>`nstream`n`nendstream`nendobj`n" +
+"trailer`n<< /Size 5 /Root 1 0 R >>`n%%EOF`n"
+[System.IO.File]::WriteAllBytes($noTextFile, [System.Text.Encoding]::ASCII.GetBytes($noTextPdf))
+
+$response = Invoke-Upload -FilePath $noTextFile
+$code = Get-ErrorCode -Body $response.Body
+Write-Result -Name "rejects a PDF with no text layer" `
+    -Ok ($response.StatusCode -eq 422 -and $code -eq "NO_TEXT_CONTENT") `
+    -Details "status $($response.StatusCode), code $code"
+
+$corruptFile = Join-Path $workDirectory "corrupt.pdf"
+$corruptPdf = "%PDF-1.4`n" + ("this is not a valid pdf body " * 20)
+[System.IO.File]::WriteAllBytes($corruptFile, [System.Text.Encoding]::ASCII.GetBytes($corruptPdf))
+
+$response = Invoke-Upload -FilePath $corruptFile
+$code = Get-ErrorCode -Body $response.Body
+Write-Result -Name "rejects a corrupted PDF" `
+    -Ok ($response.StatusCode -eq 422 -and $code -eq "PDF_PARSE_FAILED") `
+    -Details "status $($response.StatusCode), code $code"
+
 Remove-Item -LiteralPath $largeFile -Force
 Remove-Item -LiteralPath $textFile -Force
 Remove-Item -LiteralPath $fakePdf -Force
 Remove-Item -LiteralPath $emptyFile -Force
+Remove-Item -LiteralPath $noTextFile -Force
+Remove-Item -LiteralPath $corruptFile -Force
 
 Write-Host ""
 Write-Host "Result: $script:passed passed, $script:failed failed" -ForegroundColor $(if ($script:failed -eq 0) { "Green" } else { "Red" })

@@ -33,7 +33,8 @@ if (-not (Test-Path -LiteralPath $outputDirectory)) {
 
 function New-PdfTextContent {
     param(
-        [Parameter(Mandatory)]
+        [Parameter()]
+        [AllowEmptyString()]
         [string[]]$Lines,
 
         [Parameter()]
