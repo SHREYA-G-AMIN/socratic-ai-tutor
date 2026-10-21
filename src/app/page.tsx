@@ -1,22 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
+
+import { DocumentPreview } from "@/components/DocumentPreview";
+import { PdfUploader } from "@/components/PdfUploader";
+import type { DocumentUploadSuccessData } from "@/types/document";
 
 export default function Home() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showHint, setShowHint] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      alert(`Selected file: ${file.name}`);
-    }
-  };
+  const [uploadedDocument, setUploadedDocument] =
+    useState<DocumentUploadSuccessData | null>(null);
 
   const handleHintClick = () => {
     setShowHint(true);
@@ -37,30 +31,20 @@ export default function Home() {
         <h1 className="text-2xl font-bold text-slate-800 mb-2">SocraticAI</h1>
         <p className="text-sm text-slate-500 mb-8">Upload your syllabus or textbook to begin.</p>
         
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          onChange={handleFileChange} 
-          accept=".pdf" 
-          className="hidden" 
-        />
-
-        <div 
-          onClick={handleUploadClick}
-          className="border-2 border-dashed border-slate-300 rounded-lg p-6 md:p-10 text-center hover:bg-slate-50 hover:border-blue-400 transition cursor-pointer"
-        >
-          <p className="text-slate-600 font-medium">Click to upload PDF</p>
-          <p className="text-xs text-slate-400 mt-2">Max file size: 10MB</p>
-        </div>
+        <PdfUploader onUploaded={setUploadedDocument} />
       </div>
 
       {/* RIGHT SIDE / BOTTOM ON MOBILE */}
       <div className="w-full md:w-2/3 flex flex-col flex-1 overflow-hidden">
         
         <div className="flex-1 p-4 md:p-8 overflow-y-auto">
+          {uploadedDocument && (
+            <DocumentPreview document={uploadedDocument} />
+          )}
+
           <div className="flex justify-start mb-6">
             <div className="bg-white border border-slate-200 text-slate-800 p-4 rounded-lg shadow-sm max-w-lg text-sm md:text-base">
-              <p>Hello! I am your Socratic Tutor. I see you've uploaded the Data Structures syllabus. What would you like to learn today?</p>
+              <p>Hello! I am your Socratic Tutor. I see you&apos;ve uploaded the Data Structures syllabus. What would you like to learn today?</p>
             </div>
           </div>
 
