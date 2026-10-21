@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local uploads and test artifacts (never commit student documents)
+/tmp
+/uploads
+
+*.md
+*.mdx
