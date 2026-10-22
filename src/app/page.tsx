@@ -11,12 +11,36 @@ export default function Home() {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      alert(`Selected file: ${file.name}`);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  setIsLoading(true); // Reusing your existing loading animation
+  
+  try {
+    const formData = new FormData();
+    // Assuming her PDF_FILE_FIELD constant expects the name "file"
+    formData.append("file", file); 
+
+    const response = await fetch("/api/documents/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      console.log("Extracted Text:", result.data.text);
+      alert(`Success! Extracted ${result.data.characterCount} characters from ${result.data.fileName}. Check the browser console to read the text.`);
+    } else {
+      alert(`Error: ${result.error.message}`);
     }
-  };
+  } catch (error) {
+    alert("Failed to connect to the backend. Please try again.");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleHintClick = () => {
     setShowHint(true);
