@@ -9,46 +9,8 @@ import type { DocumentUploadSuccessData } from "@/types/document";
 export default function Home() {
   const [showHint, setShowHint] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-<<<<<<< HEAD
   const [uploadedDocument, setUploadedDocument] =
     useState<DocumentUploadSuccessData | null>(null);
-=======
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-
-  setIsLoading(true); // Reusing your existing loading animation
-  
-  try {
-    const formData = new FormData();
-    // Assuming her PDF_FILE_FIELD constant expects the name "file"
-    formData.append("file", file); 
-
-    const response = await fetch("/api/documents/upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    const result = await response.json();
-
-    if (result.success) {
-      console.log("Extracted Text:", result.data.text);
-      alert(`Success! Extracted ${result.data.characterCount} characters from ${result.data.fileName}. Check the browser console to read the text.`);
-    } else {
-      alert(`Error: ${result.error.message}`);
-    }
-  } catch (error) {
-    alert("Failed to connect to the backend. Please try again.");
-  } finally {
-    setIsLoading(false);
-  }
-};
->>>>>>> 4a1fbc2c4369f0ac3367f7910d4daa5de452c173
 
   const handleHintClick = () => {
     setShowHint(true);
