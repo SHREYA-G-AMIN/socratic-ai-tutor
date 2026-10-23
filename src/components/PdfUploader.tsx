@@ -141,23 +141,23 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
         onClick={() => fileInputRef.current?.click()}
         disabled={isBusy}
         aria-busy={isBusy}
-        className="w-full border-2 border-dashed border-border rounded-lg p-6 md:p-10 text-center hover:bg-surface-hover hover:border-accent-primary transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:border-border"
+        className="w-full border-2 border-dashed border-border rounded-xl p-8 md:p-12 text-center hover:bg-surface-hover hover:border-accent-primary transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:border-border"
       >
         <p className="text-secondary font-medium">
-          {isBusy ? "Uploading PDF..." : "Click to upload PDF"}
+          {isBusy ? "Uploading PDF…" : "Click to upload PDF"}
         </p>
         <p className="text-xs text-muted mt-2">Max file size: 10MB</p>
       </button>
 
       {stage && (
-        <div className="mt-4" aria-live="polite">
-          <div className="flex items-center justify-between gap-2 text-xs text-secondary">
+        <div className="mt-6" aria-live="polite">
+          <div className="flex items-center justify-between gap-2 text-sm text-secondary mb-2">
             <span className="truncate">{selectedName}</span>
-            <span className="shrink-0">
-              {stage === "uploading" ? `${progress}%` : "Extracting text..."}
+            <span className="shrink-0 font-medium">
+              {stage === "uploading" ? `${progress}%` : "Extracting text…"}
             </span>
           </div>
-          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-border">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-border">
             <div
               className={`h-full rounded-full bg-accent-primary transition-[width] duration-200 ${
                 stage === "processing" ? "animate-pulse" : ""
@@ -172,7 +172,7 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
 
       {error && (
         <div
-          className="mt-4 rounded-lg border border-error-border bg-error-bg p-3"
+          className="mt-6 rounded-xl border border-error-border bg-error-bg p-4"
           role="alert"
         >
           <p className="text-sm font-medium text-error-text">
@@ -183,7 +183,7 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
       )}
 
       {uploaded && !error && (
-        <div className="mt-4 rounded-lg border border-success-border bg-success-bg p-3">
+        <div className="mt-6 rounded-xl border border-success-border bg-success-bg p-4">
           <p className="text-sm font-medium text-success-text">Document ready</p>
           <p className="mt-1 truncate text-sm text-success-text">
             {uploaded.fileName}

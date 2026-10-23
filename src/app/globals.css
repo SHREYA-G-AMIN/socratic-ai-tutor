@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  /* === Light mode — Warm Ivory / Botanical Editorial === */
   --background: #FAF7F2;
   --surface: #FFFFFF;
   --surface-elevated: #F5F0E8;
@@ -49,21 +50,46 @@
   --info-border: #C5D9E8;
   --info-text: #2F5A7A;
 
+  /* === Type scale === */
+  --text-xs: 0.75rem;
+  --text-xs-line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm-line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base-line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg-line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl-line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl-line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl-line-height: 2.25rem;
+
+  /* === Component dimensions === */
+  --height-sm: 2.5rem;
+  --height-md: 3rem;
+  --height-lg: 3.5rem;
+
+  /* === Shadow === */
   --shadow-sm: 0 1px 2px rgba(42, 38, 34, 0.06);
   --shadow-md: 0 4px 6px rgba(42, 38, 34, 0.08);
   --shadow-lg: 0 10px 20px rgba(42, 38, 34, 0.10);
 
+  /* === Radius === */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
 
+  /* === Transitions === */
   --transition-fast: 150ms ease;
   --transition-normal: 200ms ease;
   --transition-slow: 300ms ease;
 }
 
 [data-theme="dark"] {
+  /* === Dark mode — Midnight Garden === */
   --background: #171421;
   --surface: #1E1B28;
   --surface-elevated: #34243D;
@@ -112,15 +138,39 @@
   --info-border: #354058;
   --info-text: #B8C8E8;
 
+  /* === Type scale (same values, different context) === */
+  --text-xs: 0.75rem;
+  --text-xs-line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm-line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base-line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg-line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl-line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl-line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl-line-height: 2.25rem;
+
+  /* === Component dimensions === */
+  --height-sm: 2.5rem;
+  --height-md: 3rem;
+  --height-lg: 3.5rem;
+
+  /* === Shadow === */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.5);
 
+  /* === Radius === */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
 
+  /* === Transitions === */
   --transition-fast: 150ms ease;
   --transition-normal: 200ms ease;
   --transition-slow: 300ms ease;
@@ -135,6 +185,7 @@
 }
 
 @theme inline {
+  /* === Colors === */
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);
@@ -183,10 +234,12 @@
   --color-info-border: var(--info-border);
   --color-info-text: var(--info-text);
 
+  /* === Shadows === */
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
 
+  /* === Fonts === */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

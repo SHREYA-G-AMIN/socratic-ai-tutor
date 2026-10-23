@@ -28,7 +28,15 @@ function getInitialTheme(): Theme {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const [theme, setThemeState] = useState<Theme>("light");
+
+  useEffect(() => {
+    // Reading localStorage/matchMedia is only possible after mount; this
+    // corrects the server-rendered initial "light" state to the user's
+    // stored preference without causing a hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setThemeState(getInitialTheme());
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
