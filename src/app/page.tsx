@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import { DocumentPreview } from "@/components/DocumentPreview";
 import { PdfUploader } from "@/components/PdfUploader";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import type { DocumentUploadSuccessData } from "@/types/document";
 
 export default function Home() {
@@ -25,79 +24,67 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-background">
-      {/* LEFT SIDEBAR / TOP ON MOBILE */}
-      <div className="w-full md:w-1/3 bg-surface border-b md:border-b-0 md:border-r border-border p-6 flex flex-col shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold text-primary">SocraticAI</h1>
-          <ThemeToggle />
-        </div>
-        <p className="text-sm text-muted mb-8">Upload your syllabus or textbook to begin.</p>
-
+    <div className="flex flex-col h-full bg-background">
+      <div className="flex-1 p-4 md:p-8 overflow-y-auto">
         <PdfUploader onUploaded={setUploadedDocument} />
+
+        {uploadedDocument && (
+          <DocumentPreview document={uploadedDocument} />
+        )}
+
+        <div className="flex justify-start mb-6">
+          <div className="bg-surface border border-border text-primary p-4 rounded-lg shadow-sm max-w-lg text-sm md:text-base">
+            <p>Hello! I am your Socratic Tutor. I see you&apos;ve uploaded the Data Structures syllabus. What would you like to learn today?</p>
+          </div>
+        </div>
+
+        <div className="flex justify-end mb-6">
+          <div className="bg-accent-primary text-on-accent p-4 rounded-lg shadow-sm max-w-lg text-sm md:text-base">
+            <p>Can you tell me how a Binary Search Tree works?</p>
+          </div>
+        </div>
+
+        {showHint && (
+          <div className="flex justify-start mb-6">
+            <div className="bg-hint-bg border border-hint-border text-hint-text p-4 rounded-lg shadow-sm max-w-lg text-sm md:text-base">
+              <p>Hint: Think about how a tree structure splits data into smaller halves!</p>
+            </div>
+          </div>
+        )}
+
+        {isLoading && (
+          <div className="flex justify-start mb-6">
+            <div className="bg-surface border border-border p-4 rounded-lg shadow-sm flex items-center gap-2">
+              <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
+              <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* RIGHT SIDE / BOTTOM ON MOBILE */}
-      <div className="w-full md:w-2/3 flex flex-col flex-1 overflow-hidden">
-        <div className="flex-1 p-4 md:p-8 overflow-y-auto">
-          {uploadedDocument && (
-            <DocumentPreview document={uploadedDocument} />
-          )}
+      <div className="p-4 bg-surface border-t border-border">
+        <div className="flex flex-wrap md:flex-nowrap gap-2 max-w-4xl mx-auto">
+          <button
+            onClick={handleHintClick}
+            className="bg-hint-bg text-hint-text px-4 py-3 rounded-lg font-medium hover:bg-hint-border transition text-sm md:text-base shrink-0"
+            title="Need a hint?"
+          >
+            Hint
+          </button>
 
-          <div className="flex justify-start mb-6">
-            <div className="bg-surface border border-border text-primary p-4 rounded-lg shadow-sm max-w-lg text-sm md:text-base">
-              <p>Hello! I am your Socratic Tutor. I see you&apos;ve uploaded the Data Structures syllabus. What would you like to learn today?</p>
-            </div>
-          </div>
+          <input
+            type="text"
+            placeholder="Type your answer..."
+            className="flex-1 border border-border rounded-lg px-4 py-3 focus:outline-none focus:border-accent-primary bg-surface text-primary text-sm md:text-base min-w-[150px] placeholder:text-muted"
+          />
 
-          <div className="flex justify-end mb-6">
-            <div className="bg-accent-primary text-on-accent p-4 rounded-lg shadow-sm max-w-lg text-sm md:text-base">
-              <p>Can you tell me how a Binary Search Tree works?</p>
-            </div>
-          </div>
-
-          {showHint && (
-            <div className="flex justify-start mb-6">
-              <div className="bg-hint-bg border border-hint-border text-hint-text p-4 rounded-lg shadow-sm max-w-lg text-sm md:text-base">
-                <p>Hint: Think about how a tree structure splits data into smaller halves!</p>
-              </div>
-            </div>
-          )}
-
-          {isLoading && (
-            <div className="flex justify-start mb-6">
-              <div className="bg-surface border border-border p-4 rounded-lg shadow-sm flex items-center gap-2">
-                <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
-                <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="p-4 bg-surface border-t border-border">
-          <div className="flex flex-wrap md:flex-nowrap gap-2 max-w-4xl mx-auto">
-            <button
-              onClick={handleHintClick}
-              className="bg-hint-bg text-hint-text px-4 py-3 rounded-lg font-medium hover:bg-hint-border transition text-sm md:text-base shrink-0"
-              title="Need a hint?"
-            >
-              Hint
-            </button>
-
-            <input
-              type="text"
-              placeholder="Type your answer..."
-              className="flex-1 border border-border rounded-lg px-4 py-3 focus:outline-none focus:border-accent-primary bg-surface text-primary text-sm md:text-base min-w-[150px] placeholder:text-muted"
-            />
-
-            <button
-              onClick={handleSendClick}
-              className="bg-accent-primary text-on-accent px-6 py-3 rounded-lg font-medium hover:bg-accent-primary-hover transition text-sm md:text-base shrink-0"
-            >
-              Send
-            </button>
-          </div>
+          <button
+            onClick={handleSendClick}
+            className="bg-accent-primary text-on-accent px-6 py-3 rounded-lg font-medium hover:bg-accent-primary-hover transition text-sm md:text-base shrink-0"
+          >
+            Send
+          </button>
         </div>
       </div>
     </div>
