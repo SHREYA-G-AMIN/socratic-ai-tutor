@@ -196,6 +196,10 @@
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
   --color-text-on-accent: var(--text-on-accent);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-on-accent: var(--text-on-accent);
 
   --color-border: var(--border);
   --color-border-subtle: var(--border-subtle);

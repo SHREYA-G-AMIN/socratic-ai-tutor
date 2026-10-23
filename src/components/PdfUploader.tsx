@@ -33,27 +33,24 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
   const [stage, setStage] = useState<"uploading" | "processing" | null>(null);
   const [progress, setProgress] = useState(0);
   const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState<DocumentUploadErrorResponse["error"] | null>(
-    null,
-  );
-  const [uploaded, setUploaded] = useState<DocumentUploadSuccessData | null>(
     null,
   );
 
   const isBusy = stage !== null;
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    event.target.value = "";
-
-    if (!file) {
-      return;
-    }
-
+  function processFile(file: File) {
     setSelectedName(file.name);
     setError(null);
-    setUploaded(null);
+
+    if (file.type && file.type !== "application/pdf" && !file.name.endsWith(".pdf")) {
+      setError({
+        code: "UNSUPPORTED_MEDIA_TYPE",
+        message: "Only PDF files are supported. Please select a valid PDF.",
+      });
+      return;
+    }
 
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
       setError({
@@ -64,6 +61,37 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
     }
 
     upload(file);
+  }
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) {
+      processFile(file);
+    }
+  }
+
+  function handleDragOver(event: React.DragEvent) {
+    event.preventDefault();
+    if (!isBusy) {
+      setIsDragOver(true);
+    }
+  }
+
+  function handleDragLeave(event: React.DragEvent) {
+    event.preventDefault();
+    setIsDragOver(false);
+  }
+
+  function handleDrop(event: React.DragEvent) {
+    event.preventDefault();
+    setIsDragOver(false);
+    if (isBusy) return;
+
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
   }
 
   function upload(file: File) {
@@ -93,7 +121,6 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
       const body = parseResponse(request);
 
       if (body?.success) {
-        setUploaded(body.data);
         onUploaded?.(body.data);
         return;
       }
@@ -127,7 +154,18 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
   }
 
   return (
-    <div>
+    <div className="space-y-6">
+      {/* Heading & short supporting text */}
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-text-primary">
+          Upload Course Material
+        </h3>
+        <p className="text-xs sm:text-sm text-text-secondary leading-relaxed">
+          Upload your syllabus, textbook chapter, or lecture notes in PDF format.
+          Your tutor will reference this content to guide your thinking.
+        </p>
+      </div>
+
       <input
         type="file"
         ref={fileInputRef}
@@ -136,28 +174,62 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
         className="hidden"
       />
 
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={isBusy}
+      {/* Dashed drop zone */}
+      <div
+        onClick={() => !isBusy && fileInputRef.current?.click()}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && !isBusy) {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
         aria-busy={isBusy}
-        className="w-full border-2 border-dashed border-border rounded-xl p-8 md:p-12 text-center hover:bg-surface-hover hover:border-accent-primary transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:border-border"
+        className={`w-full border-2 border-dashed rounded-xl p-8 sm:p-10 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-3 ${
+          isDragOver
+            ? "border-accent-primary bg-accent-primary-soft/30 scale-[1.005]"
+            : "border-border hover:border-accent-primary hover:bg-surface-elevated/40 bg-surface-elevated/10"
+        } ${isBusy ? "cursor-not-allowed opacity-75" : ""}`}
       >
-        <p className="text-secondary font-medium">
-          {isBusy ? "Uploading PDF…" : "Click to upload PDF"}
-        </p>
-        <p className="text-xs text-muted mt-2">Max file size: 10MB</p>
-      </button>
+        <div className="w-12 h-12 rounded-xl bg-surface-elevated border border-border flex items-center justify-center text-accent-primary shadow-xs">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+            />
+          </svg>
+        </div>
 
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-text-primary">
+            {isBusy
+              ? stage === "uploading"
+                ? "Uploading document…"
+                : "Extracting text…"
+              : "Choose a PDF file or drag & drop here"}
+          </p>
+          <p className="text-xs text-text-muted">
+            PDF syllabus, lecture notes, or textbooks up to 10MB
+          </p>
+        </div>
+      </div>
+
+      {/* Progress display */}
       {stage && (
-        <div className="mt-6" aria-live="polite">
-          <div className="flex items-center justify-between gap-2 text-sm text-secondary mb-2">
-            <span className="truncate">{selectedName}</span>
+        <div className="rounded-xl border border-border bg-surface-elevated/40 p-4 space-y-2" aria-live="polite">
+          <div className="flex items-center justify-between gap-2 text-xs text-text-secondary">
+            <span className="truncate font-medium text-text-primary">{selectedName}</span>
             <span className="shrink-0 font-medium">
               {stage === "uploading" ? `${progress}%` : "Extracting text…"}
             </span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-border">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
             <div
               className={`h-full rounded-full bg-accent-primary transition-[width] duration-200 ${
                 stage === "processing" ? "animate-pulse" : ""
@@ -170,30 +242,52 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
         </div>
       )}
 
+      {/* Error display */}
       {error && (
         <div
-          className="mt-6 rounded-xl border border-error-border bg-error-bg p-4"
+          className="rounded-xl border border-error-border bg-error-bg p-4 flex items-start gap-3"
           role="alert"
         >
-          <p className="text-sm font-medium text-error-text">
-            {ERROR_TITLES[error.code]}
-          </p>
-          <p className="mt-1 text-sm text-error-text">{error.message}</p>
+          <div className="w-5 h-5 rounded-full bg-error/15 text-error-text flex items-center justify-center shrink-0 mt-0.5">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <div className="text-xs">
+            <p className="font-semibold text-error-text">
+              {ERROR_TITLES[error.code]}
+            </p>
+            <p className="mt-0.5 text-error-text/90">{error.message}</p>
+          </div>
         </div>
       )}
 
-      {uploaded && !error && (
-        <div className="mt-6 rounded-xl border border-success-border bg-success-bg p-4">
-          <p className="text-sm font-medium text-success-text">Document ready</p>
-          <p className="mt-1 truncate text-sm text-success-text">
-            {uploaded.fileName}
-          </p>
-          <p className="mt-1 text-xs text-success-text">
-            {uploaded.pageCount ?? "?"} pages ·{" "}
-            {uploaded.characterCount.toLocaleString()} characters
-          </p>
+      {/* Guided Workspace Tips */}
+      <div className="pt-2">
+        <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-3">
+          How Socratic Tutoring Works
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3 rounded-lg border border-border bg-surface-elevated/20 space-y-1">
+            <div className="text-accent-primary text-xs font-semibold">1. Grounding</div>
+            <p className="text-[11px] text-text-secondary leading-normal">
+              Extracts concepts directly from your uploaded material.
+            </p>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-surface-elevated/20 space-y-1">
+            <div className="text-accent-secondary text-xs font-semibold">2. Inquiry</div>
+            <p className="text-[11px] text-text-secondary leading-normal">
+              Asks guided questions instead of giving away direct answers.
+            </p>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-surface-elevated/20 space-y-1">
+            <div className="text-info text-xs font-semibold">3. Recall</div>
+            <p className="text-[11px] text-text-secondary leading-normal">
+              Reinforces your understanding with step-by-step hints.
+            </p>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
