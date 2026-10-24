@@ -11,6 +11,15 @@ interface Message {
   text: string;
 }
 
+interface ChatRequest {
+  message: string;
+  documentText: string;
+}
+
+interface ChatResponse {
+  reply: string;
+}
+
 const INITIAL_MESSAGES: Message[] = [
   {
     role: "tutor",
@@ -21,6 +30,7 @@ const INITIAL_MESSAGES: Message[] = [
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [uploadedDocument, setUploadedDocument] =
     useState<DocumentUploadSuccessData | null>(null);
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
@@ -36,6 +46,7 @@ export default function Home() {
   // When a document is uploaded, switch to chat on mobile if appropriate
   const handleDocumentUploaded = (doc: DocumentUploadSuccessData) => {
     setUploadedDocument(doc);
+    setChatError(null);
   };
 
   const handleHintClick = () => {
@@ -47,30 +58,65 @@ export default function Home() {
           "Hint: Think about how a tree structure splits data into smaller halves!",
       },
     ]);
+    setChatError(null);
   };
 
-  const handleSendClick = () => {
+  const handleSendClick = async () => {
     if (!inputValue.trim()) return;
 
-    const userMsg: Message = { role: "student", text: inputValue };
+    if (!uploadedDocument) {
+      setChatError("Please upload a document before asking questions.");
+      return;
+    }
+
+    const userMsg: Message = { role: "student", text: inputValue.trim() };
     setMessages((prev) => [...prev, userMsg]);
     setInputValue("");
     setIsLoading(true);
+    setChatError(null);
 
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const response: Response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: inputValue,
+          documentText: uploadedDocument.text,
+        } satisfies ChatRequest),
+      });
+
+      const body = await response.json();
+
+      if (!response.ok) {
+        const errorBody = body as { error?: string };
+        throw new Error(errorBody.error || "Failed to send message");
+      }
+
+      const chatBody = body as ChatResponse;
       setMessages((prev) => [
         ...prev,
         {
           role: "tutor",
-          text: "That is a great question. Let me think about that with you.",
+          text: chatBody.reply,
         },
       ]);
-    }, 1500);
+    } catch (error) {
+      setInputValue(userMsg.text);
+      setChatError(
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred. Please try again.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(event.target.value);
+    setChatError(null);
   };
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -235,6 +281,17 @@ export default function Home() {
                 </div>
               </div>
             ))}
+
+            {chatError && (
+              <div className="flex items-start gap-2.5 justify-start">
+                <div className="w-7 h-7 rounded-lg bg-error-text/10 border border-error-text/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                  !
+                </div>
+                <div className="bg-error-text/10 border border-error-text/30 px-4 py-3 rounded-2xl rounded-tl-xs text-error-text shadow-xs">
+                  <p>{chatError}</p>
+                </div>
+              </div>
+            )}
 
             {isLoading && (
               <div className="flex items-start gap-2.5 justify-start">
