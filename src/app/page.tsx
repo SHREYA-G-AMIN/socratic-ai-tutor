@@ -14,6 +14,7 @@ interface Message {
 interface ChatRequest {
   message: string;
   documentText: string;
+  history: Message[];
 }
 
 interface ChatResponse {
@@ -84,6 +85,7 @@ export default function Home() {
         body: JSON.stringify({
           message: inputValue,
           documentText: uploadedDocument.text,
+          history: messages,
         } satisfies ChatRequest),
       });
 
