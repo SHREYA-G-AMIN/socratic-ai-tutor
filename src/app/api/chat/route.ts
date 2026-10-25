@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { chunkText } from "@/lib/documents/chunker"; 
+import { chunkText } from "@/lib/documents/chunker";
+import { retrieveRelevantChunks } from "@/lib/documents/retrieval";
+
+const MAX_RETRIEVED_CHUNKS = 3;
+const CHUNK_SIZE = 500;
+const CHUNK_OVERLAP = 100;
 
 export async function POST(request: Request) {
   try {
@@ -13,34 +18,29 @@ export async function POST(request: Request) {
       );
     }
 
-    // Bypass strict type checking for the options object
-    const chunks = chunkText(documentText, { maxLength: 500 } as any); 
-
-    if (!chunks || chunks.length === 0) {
-      return NextResponse.json({ reply: "No document content available to search." });
-    }
-
-    const keywords = message.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
-    
-    const scoredChunks = chunks.map((item: any) => {
-      const chunkString = item.text || item; 
-      const lowerChunk = chunkString.toLowerCase();
-      
-      const score = keywords.reduce((acc: number, word: string) => 
-        lowerChunk.includes(word) ? acc + 1 : acc, 0
-      );
-      
-      return { chunk: chunkString, score };
+    const chunks = chunkText(documentText, {
+      chunkSize: CHUNK_SIZE,
+      chunkOverlap: CHUNK_OVERLAP,
     });
 
-    scoredChunks.sort((a: any, b: any) => b.score - a.score);
-    const bestChunk = scoredChunks[0];
+    if (!chunks || chunks.length === 0) {
+      return NextResponse.json(
+        { reply: "No document content available to search." },
+        { status: 200 }
+      );
+    }
+
+    const relevant = retrieveRelevantChunks(chunks, message, MAX_RETRIEVED_CHUNKS);
 
     let replyMessage = `Question: "${message}"\n\n`;
-    if (bestChunk && bestChunk.score > 0) {
-      replyMessage += `Most relevant text found: "${bestChunk.chunk}"`;
+
+    if (relevant.length === 0) {
+      replyMessage +=
+        "Could not find any relevant passages in the document for your question. Try rephrasing or asking about a different topic.";
     } else {
-      replyMessage += `Could not find any exact keyword matches in the document.`;
+      replyMessage += relevant
+        .map((result, i) => `Passage ${i + 1}: "${result.chunk}"`)
+        .join("\n\n");
     }
 
     return NextResponse.json({ reply: replyMessage });
