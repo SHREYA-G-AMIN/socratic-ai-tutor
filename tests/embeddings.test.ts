@@ -27,18 +27,22 @@ function withApiKey<T>(apiKey: string | undefined, callback: () => Promise<T>) {
 
 test("generates retrieval embeddings using Gemini's batch endpoint", async () => {
   await withApiKey("test-key", async () => {
-    let requestBody: {
-      requests: Array<{
-        model: string;
-        taskType: string;
-        content: { parts: Array<{ text: string }> };
-      }>;
-    } | null = null;
-    let apiKeyHeader: string | null = null;
+    const observed: {
+      requestBody:
+        | {
+            requests: Array<{
+              model: string;
+              taskType: string;
+              content: { parts: Array<{ text: string }> };
+            }>;
+          }
+        | null;
+      apiKeyHeader: string | null;
+    } = { requestBody: null, apiKeyHeader: null };
 
     const fetcher: typeof fetch = async (_input, init) => {
-      requestBody = JSON.parse(String(init?.body));
-      apiKeyHeader = new Headers(init?.headers).get("x-goog-api-key");
+      observed.requestBody = JSON.parse(String(init?.body));
+      observed.apiKeyHeader = new Headers(init?.headers).get("x-goog-api-key");
       return Response.json({
         embeddings: [{ values: [0.1, 0.9] }, { values: [0.8, 0.2] }],
       });
@@ -54,14 +58,15 @@ test("generates retrieval embeddings using Gemini's batch endpoint", async () =>
       [0.1, 0.9],
       [0.8, 0.2],
     ]);
-    assert.equal(apiKeyHeader, "test-key");
+    assert.ok(observed.requestBody);
+    assert.equal(observed.apiKeyHeader, "test-key");
     assert.equal(
-      requestBody?.requests[0].model,
+      observed.requestBody.requests[0].model,
       "models/gemini-embedding-001",
     );
-    assert.equal(requestBody?.requests[0].taskType, "RETRIEVAL_QUERY");
+    assert.equal(observed.requestBody.requests[0].taskType, "RETRIEVAL_QUERY");
     assert.equal(
-      requestBody?.requests[1].content.parts[0].text,
+      observed.requestBody.requests[1].content.parts[0].text,
       "student query",
     );
   });

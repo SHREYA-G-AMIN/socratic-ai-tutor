@@ -8,6 +8,8 @@ const {
   extractKeywords,
   scoreChunk,
   retrieveRelevantChunks,
+  retrieveSemanticallyRelevantChunks,
+  cosineSimilarity,
 } = await import("../src/lib/documents/retrieval.ts");
 const { chunkText } = await import("../src/lib/documents/chunker.ts");
 
@@ -178,4 +180,131 @@ test("retrieval works end-to-end with chunkText output", () => {
     results.some((r) => r.chunk.includes("properties")),
     "expected a chunk mentioning properties",
   );
+});
+
+test("semantic retrieval ranks by cosine similarity and includes page metadata", async () => {
+  const chunks = chunkText(
+    "Alpha material explains vectors. Beta material covers matrices.",
+    { chunkSize: 35, chunkOverlap: 0 },
+  );
+  const embedder = async (texts: string[], taskType: string) => {
+    if (taskType === "RETRIEVAL_QUERY") {
+      return [[1, 0]];
+    }
+
+    return texts.map((text) =>
+      text.includes("vectors") ? [0.9, 0.1] : [0.6, 0.8],
+    );
+  };
+  const firstChunk = chunks[0];
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "How do vectors work?",
+    {
+      embedder,
+      model: "test-semantic-ranking-model",
+      pageRanges: [
+        {
+          pageNumber: 4,
+          startChar: firstChunk.start,
+          endChar: firstChunk.end,
+        },
+      ],
+    },
+  );
+
+  assert.equal(results[0].index, firstChunk.index);
+  assert.deepEqual(results[0].pageNumbers, [4]);
+  assert.ok(results[0].score > results[1].score);
+});
+
+test("semantic retrieval excludes unrelated chunks below the similarity threshold", async () => {
+  const chunks = chunkText("A document chunk about botany.", {
+    chunkSize: 100,
+    chunkOverlap: 0,
+  });
+  const embedder = async (_texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY" ? [[0, 1]] : [[1, 0]];
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "How does orbital mechanics work?",
+    { embedder, model: "test-irrelevant-query-model" },
+  );
+
+  assert.deepEqual(results, []);
+});
+
+test("semantic retrieval leaves page numbers empty when source metadata is missing", async () => {
+  const chunks = chunkText("A source passage about cognition.", {
+    chunkSize: 100,
+    chunkOverlap: 0,
+  });
+  const embedder = async (_texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY" ? [[1, 0]] : [[1, 0]];
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "Explain cognition",
+    { embedder, model: "test-missing-metadata-model" },
+  );
+
+  assert.deepEqual(results[0].pageNumbers, []);
+  assert.equal(results[0].start, 0);
+  assert.ok(results[0].end > results[0].start);
+});
+
+test("semantic retrieval propagates provider failures for the API to handle", async () => {
+  const chunks = chunkText("A passage about retrieval.", {
+    chunkSize: 100,
+    chunkOverlap: 0,
+  });
+
+  await assert.rejects(
+    retrieveSemanticallyRelevantChunks(
+      chunks,
+      "Explain retrieval",
+      {
+        model: "test-provider-failure-model",
+        embedder: async () => {
+          throw new Error("provider unavailable");
+        },
+      },
+    ),
+    /provider unavailable/,
+  );
+});
+
+test("semantic retrieval reuses document embeddings for follow-up questions", async () => {
+  const chunks = chunkText("Unique reusable content about wave mechanics.", {
+    chunkSize: 100,
+    chunkOverlap: 0,
+  });
+  let documentEmbeddingCalls = 0;
+  let queryEmbeddingCalls = 0;
+  const embedder = async (_texts: string[], taskType: string) => {
+    if (taskType === "RETRIEVAL_DOCUMENT") {
+      documentEmbeddingCalls++;
+      return [[1, 0]];
+    }
+
+    queryEmbeddingCalls++;
+    return [[1, 0]];
+  };
+
+  await retrieveSemanticallyRelevantChunks(chunks, "First question", {
+    embedder,
+    model: "test-cache-reuse-model",
+  });
+  await retrieveSemanticallyRelevantChunks(chunks, "Follow-up question", {
+    embedder,
+    model: "test-cache-reuse-model",
+  });
+
+  assert.equal(documentEmbeddingCalls, 1);
+  assert.equal(queryEmbeddingCalls, 2);
+});
+
+test("cosine similarity rejects vectors with different dimensions", () => {
+  assert.throws(() => cosineSimilarity([1, 0], [1]), RangeError);
 });
