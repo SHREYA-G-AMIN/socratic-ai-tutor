@@ -39,6 +39,7 @@ export async function POST(request: Request): Promise<Response> {
         pageCount: extraction.pageCount,
         characterCount: extraction.characterCount,
         text: extraction.text,
+        pageRanges: extraction.pageRanges,
         truncated: extraction.truncated,
       },
     };

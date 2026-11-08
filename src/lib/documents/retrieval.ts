@@ -1,6 +1,18 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+import type { DocumentPageRange } from "@/types/document";
 import type { TextChunk } from "./chunker";
+import {
+  DEFAULT_GEMINI_EMBEDDING_MODEL,
+  getGeminiEmbeddingModel,
+  generateEmbeddings,
+  type EmbeddingBatch,
+} from "./embeddings";
+
+const MINIMUM_SEMANTIC_SIMILARITY = 0.35;
+const MAX_CACHED_DOCUMENTS = 2;
+const documentEmbeddingCache = new Map<string, Promise<number[][]>>();
 
 /**
  * A single chunk together with its relevance score for a query.
@@ -12,6 +24,12 @@ export interface RetrievalResult {
   score: number;
   /** Zero-based position of the chunk in the original document. */
   index: number;
+  /** Inclusive character offset in the source document. */
+  start: number;
+  /** Exclusive character offset in the source document. */
+  end: number;
+  /** One-based source PDF page numbers, if page metadata was supplied. */
+  pageNumbers: number[];
 }
 
 /**
@@ -73,6 +91,7 @@ export function retrieveRelevantChunks(
   chunks: TextChunk[],
   message: string,
   maxResults: number = 3,
+  pageRanges: DocumentPageRange[] = [],
 ): RetrievalResult[] {
   const keywords = extractKeywords(message);
 
@@ -85,8 +104,157 @@ export function retrieveRelevantChunks(
       chunk: chunk.text,
       score: scoreChunk(chunk.text, keywords),
       index: chunk.index,
+      start: chunk.start,
+      end: chunk.end,
+      pageNumbers: getPageNumbers(chunk, pageRanges),
     }))
     .filter((result) => result.score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, maxResults);
+}
+
+/**
+ * Ranks chunks using Gemini retrieval embeddings. Document vectors are cached
+ * by model and content for reuse across questions in the same server process.
+ */
+export async function retrieveSemanticallyRelevantChunks(
+  chunks: TextChunk[],
+  message: string,
+  options: {
+    maxResults?: number;
+    pageRanges?: DocumentPageRange[];
+    embedder?: EmbeddingBatch;
+    model?: string;
+  } = {},
+): Promise<RetrievalResult[]> {
+  if (chunks.length === 0 || !message.trim()) {
+    return [];
+  }
+
+  const embedder = options.embedder ?? generateEmbeddings;
+  const model =
+    options.model ??
+    (embedder === generateEmbeddings
+      ? getGeminiEmbeddingModel()
+      : DEFAULT_GEMINI_EMBEDDING_MODEL);
+  const cacheKey = createDocumentCacheKey(
+    chunks.map((chunk) => chunk.text),
+    model,
+  );
+  const documentVectors = await getCachedDocumentEmbeddings(
+    cacheKey,
+    chunks.map((chunk) => chunk.text),
+    embedder,
+  );
+  if (documentVectors.length !== chunks.length) {
+    throw new Error("The embedding provider returned an invalid document embedding count.");
+  }
+
+  const [queryVector] = await embedder([message], "RETRIEVAL_QUERY");
+
+  if (!queryVector || queryVector.length === 0) {
+    throw new Error("The embedding provider returned no query embedding.");
+  }
+
+  const results = chunks
+    .map((chunk, index) => {
+      const documentVector = documentVectors[index];
+      if (!documentVector) {
+        throw new Error("The embedding provider returned a missing document embedding.");
+      }
+
+      return {
+        chunk: chunk.text,
+        score: cosineSimilarity(queryVector, documentVector),
+        index: chunk.index,
+        start: chunk.start,
+        end: chunk.end,
+        pageNumbers: getPageNumbers(chunk, options.pageRanges ?? []),
+      };
+    })
+    .filter((result) => result.score >= MINIMUM_SEMANTIC_SIMILARITY)
+    .sort((left, right) => right.score - left.score || left.index - right.index);
+
+  return results.slice(0, options.maxResults ?? 3);
+}
+
+export function cosineSimilarity(left: number[], right: number[]): number {
+  if (left.length === 0 || left.length !== right.length) {
+    throw new RangeError("Embedding vectors must have the same non-zero length.");
+  }
+
+  let dotProduct = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+
+  for (let index = 0; index < left.length; index++) {
+    const leftValue = left[index];
+    const rightValue = right[index];
+    if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) {
+      throw new RangeError("Embedding vectors must contain finite values.");
+    }
+
+    dotProduct += leftValue * rightValue;
+    leftMagnitude += leftValue * leftValue;
+    rightMagnitude += rightValue * rightValue;
+  }
+
+  if (leftMagnitude === 0 || rightMagnitude === 0) {
+    return 0;
+  }
+
+  return dotProduct / Math.sqrt(leftMagnitude * rightMagnitude);
+}
+
+function getPageNumbers(
+  chunk: TextChunk,
+  pageRanges: DocumentPageRange[],
+): number[] {
+  return pageRanges
+    .filter(
+      (range) =>
+        chunk.start < range.endChar && chunk.end > range.startChar,
+    )
+    .map((range) => range.pageNumber);
+}
+
+async function getCachedDocumentEmbeddings(
+  cacheKey: string,
+  texts: string[],
+  embedder: EmbeddingBatch,
+): Promise<number[][]> {
+  let cached = documentEmbeddingCache.get(cacheKey);
+
+  if (cached) {
+    documentEmbeddingCache.delete(cacheKey);
+    documentEmbeddingCache.set(cacheKey, cached);
+    return cached;
+  }
+
+  cached = embedder(texts, "RETRIEVAL_DOCUMENT");
+  documentEmbeddingCache.set(cacheKey, cached);
+
+  while (documentEmbeddingCache.size > MAX_CACHED_DOCUMENTS) {
+    const oldestKey = documentEmbeddingCache.keys().next().value;
+    if (oldestKey) {
+      documentEmbeddingCache.delete(oldestKey);
+    }
+  }
+
+  try {
+    return await cached;
+  } catch (error) {
+    if (documentEmbeddingCache.get(cacheKey) === cached) {
+      documentEmbeddingCache.delete(cacheKey);
+    }
+    throw error;
+  }
+}
+
+function createDocumentCacheKey(texts: string[], model: string): string {
+  return createHash("sha256")
+    .update(model)
+    .update("\0")
+    .update(JSON.stringify(texts))
+    .digest("hex");
 }

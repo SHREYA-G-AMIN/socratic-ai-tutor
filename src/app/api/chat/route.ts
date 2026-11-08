@@ -1,23 +1,42 @@
 import { NextResponse } from "next/server";
+import { EmbeddingProviderError } from "@/lib/documents/embeddings";
 import { chunkText } from "@/lib/documents/chunker";
-import { retrieveRelevantChunks } from "@/lib/documents/retrieval";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  MAX_EXTRACTED_CHARACTERS,
+  MAX_PDF_PAGES,
+} from "@/lib/documents/constants";
+import {
+  retrieveRelevantChunks,
+  retrieveSemanticallyRelevantChunks,
+  type RetrievalResult,
+} from "@/lib/documents/retrieval";
+import type { DocumentPageRange } from "@/types/document";
+import type { ChatResponse, ChatSourceReference } from "@/types/chat";
 
 const MAX_RETRIEVED_CHUNKS = 3;
+const MAX_MESSAGE_LENGTH = 2_000;
 const CHUNK_SIZE = 500;
 const CHUNK_OVERLAP = 100;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { message, documentText, history = [] } = body;
+    const body: unknown = await request.json();
+    if (!isRecord(body)) {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
 
-    if (!message || !documentText) {
+    const { message, documentText } = body;
+    if (
+      typeof message !== "string" ||
+      message.trim().length === 0 ||
+      message.length > MAX_MESSAGE_LENGTH ||
+      typeof documentText !== "string" ||
+      documentText.length === 0 ||
+      documentText.length > MAX_EXTRACTED_CHARACTERS
+    ) {
       return NextResponse.json(
-        { error: "Message and document text are required" },
-        { status: 400 }
+        { error: "A valid message and document text are required" },
+        { status: 400 },
       );
     }
 
@@ -26,58 +45,114 @@ export async function POST(request: Request) {
       chunkOverlap: CHUNK_OVERLAP,
     });
 
-    if (!chunks || chunks.length === 0) {
-      return NextResponse.json(
-        { reply: "No document content available to search." },
-        { status: 200 }
+    if (chunks.length === 0) {
+      return NextResponse.json({
+        reply: "No document content available to search.",
+        sources: [],
+        retrievalMode: "keyword",
+      } satisfies ChatResponse);
+    }
+
+    const pageRanges = parsePageRanges(body.pageRanges, documentText.length);
+    const fileName =
+      typeof body.fileName === "string" && body.fileName.trim()
+        ? body.fileName.trim().slice(0, 255)
+        : null;
+
+    let retrievalMode: ChatResponse["retrievalMode"] = "semantic";
+    let warning: string | undefined;
+    let relevant: RetrievalResult[];
+
+    try {
+      relevant = await retrieveSemanticallyRelevantChunks(
+        chunks,
+        message.trim(),
+        {
+          maxResults: MAX_RETRIEVED_CHUNKS,
+          pageRanges,
+        },
+      );
+    } catch (error) {
+      retrievalMode = "keyword";
+      warning =
+        error instanceof EmbeddingProviderError
+          ? error.message
+          : "Semantic retrieval is unavailable. Showing keyword matches instead.";
+      console.error(
+        "[api/chat] semantic retrieval unavailable; using keyword fallback",
+        error instanceof EmbeddingProviderError ? error.code : "UNKNOWN_ERROR",
+      );
+      relevant = retrieveRelevantChunks(
+        chunks,
+        message.trim(),
+        MAX_RETRIEVED_CHUNKS,
+        pageRanges,
       );
     }
 
-    const relevantChunks = retrieveRelevantChunks(chunks, message, MAX_RETRIEVED_CHUNKS);
-    const contextText = relevantChunks.length > 0 
-      ? relevantChunks.map((result, i) => `Passage ${i + 1}:\n${result.chunk}`).join("\n\n")
-      : "No direct relevant passages found in the document.";
-
-    // Updated Socratic prompt with an exit condition for correct answers
-    const prompt = `You are a Socratic academic tutor. Your goal is to guide the student to the correct answer rather than giving it to them directly. 
-
-If the student has fully and correctly answered the concept, validate their answer, praise their understanding, and ask if they have any new questions. DO NOT ask another leading question about the current topic if they already understand it.
-
-If they are still learning or struggling, use ONLY the provided context passages to provide a thoughtful hint or ask a leading question that helps them discover the answer. Do not give the direct answer away. If the information is not in the passages, state clearly that you cannot find it.
-
-Context Passages:
-${contextText}
-
-User Question: ${message}`;
-
-    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
-
-    // Map frontend "student" to "user" and everything else ("tutor", "hint") to "model"
-    let formattedHistory = history.map((msg: any) => ({
-      role: msg.role === "student" ? "user" : "model",
-      parts: [{ text: msg.text || msg.content || "" }],
+    const reply =
+      relevant.length === 0
+        ? `Question: "${message.trim()}"\n\nCould not find any relevant passages in the document for your question. Try rephrasing or asking about a different topic.`
+        : `Question: "${message.trim()}"\n\n${relevant
+            .map((result, index) => `Passage ${index + 1}: "${result.chunk}"`)
+            .join("\n\n")}`;
+    const sources: ChatSourceReference[] = relevant.map((result) => ({
+      fileName,
+      chunkIndex: result.index,
+      startChar: result.start,
+      endChar: result.end,
+      pageNumbers: result.pageNumbers,
+      text: result.chunk,
+      score: result.score,
     }));
 
-    // Gemini strictly requires the history to start with a 'user' message.
-    // This removes the initial "Hello! I am your Socratic Tutor." greeting.
-    while (formattedHistory.length > 0 && formattedHistory[0].role === "model") {
-      formattedHistory.shift();
-    }
-
-    const chat = model.startChat({
-      history: formattedHistory,
-    });
-
-    const result = await chat.sendMessage(prompt);
-    const replyMessage = result.response.text();
-
-    return NextResponse.json({ reply: replyMessage });
-
+    return NextResponse.json({
+      reply,
+      sources,
+      retrievalMode,
+      ...(warning ? { warning } : {}),
+    } satisfies ChatResponse);
   } catch (error) {
     console.error("Chat API Error:", error);
     return NextResponse.json(
       { error: "Failed to process chat request" },
-      { status: 500 }
+      { status: 500 },
     );
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parsePageRanges(
+  value: unknown,
+  documentLength: number,
+): DocumentPageRange[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .slice(0, MAX_PDF_PAGES)
+    .filter(
+      (range): range is DocumentPageRange =>
+        isRecord(range) &&
+        typeof range.pageNumber === "number" &&
+        Number.isInteger(range.pageNumber) &&
+        range.pageNumber >= 1 &&
+        range.pageNumber <= MAX_PDF_PAGES &&
+        typeof range.startChar === "number" &&
+        Number.isInteger(range.startChar) &&
+        range.startChar >= 0 &&
+        typeof range.endChar === "number" &&
+        Number.isInteger(range.endChar) &&
+        range.endChar > range.startChar &&
+        range.endChar <= documentLength,
+    )
+    .map((range) => ({
+      pageNumber: range.pageNumber,
+      startChar: range.startChar,
+      endChar: range.endChar,
+    }));
 }

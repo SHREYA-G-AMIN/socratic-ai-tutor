@@ -17,6 +17,15 @@ export type DocumentUploadErrorCode =
   | "TOO_MANY_PAGES"
   | "EXTRACTION_FAILED";
 
+export interface DocumentPageRange {
+  /** One-based PDF page number reported by the PDF parser. */
+  pageNumber: number;
+  /** Inclusive character offset in the returned document text. */
+  startChar: number;
+  /** Exclusive character offset in the returned document text. */
+  endChar: number;
+}
+
 export interface DocumentUploadSuccessData {
   /** Original file name, as sent by the client. */
   fileName: string;
@@ -28,6 +37,8 @@ export interface DocumentUploadSuccessData {
   characterCount: number;
   /** The extracted, whitespace-normalised text of the document. */
   text: string;
+  /** Character ranges for extracted pages; pages without text are omitted. */
+  pageRanges: DocumentPageRange[];
   /** True when the extracted text was longer than the response limit. */
   truncated: boolean;
 }

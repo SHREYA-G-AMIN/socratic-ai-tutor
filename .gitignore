@@ -46,3 +46,5 @@ next-env.d.ts
 
 *.md
 *.mdx
+!docs/task.md
+!.env.example

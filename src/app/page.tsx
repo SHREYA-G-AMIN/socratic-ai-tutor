@@ -4,21 +4,25 @@ import { useEffect, useRef, useState } from "react";
 
 import { DocumentPreview } from "@/components/DocumentPreview";
 import { PdfUploader } from "@/components/PdfUploader";
-import type { DocumentUploadSuccessData } from "@/types/document";
+import type { ChatResponse, ChatSourceReference } from "@/types/chat";
+import type {
+  DocumentPageRange,
+  DocumentUploadSuccessData,
+} from "@/types/document";
 
 interface Message {
   role: "tutor" | "student" | "hint";
   text: string;
+  sources?: ChatSourceReference[];
+  warning?: string;
 }
 
 interface ChatRequest {
   message: string;
   documentText: string;
+  fileName: string;
+  pageRanges: DocumentPageRange[];
   history: Message[];
-}
-
-interface ChatResponse {
-  reply: string;
 }
 
 const INITIAL_MESSAGES: Message[] = [
@@ -85,6 +89,8 @@ export default function Home() {
         body: JSON.stringify({
           message: inputValue,
           documentText: uploadedDocument.text,
+          fileName: uploadedDocument.fileName,
+          pageRanges: uploadedDocument.pageRanges,
           history: messages,
         } satisfies ChatRequest),
       });
@@ -102,6 +108,8 @@ export default function Home() {
         {
           role: "tutor",
           text: chatBody.reply,
+          sources: chatBody.sources,
+          warning: chatBody.warning,
         },
       ]);
     } catch (error) {
@@ -280,6 +288,31 @@ export default function Home() {
                   }`}
                 >
                   <p>{msg.text}</p>
+                  {msg.warning && (
+                    <p className="mt-2 border-t border-border pt-2 text-xs text-text-muted">
+                      {msg.warning}
+                    </p>
+                  )}
+                  {msg.sources && msg.sources.length > 0 && (
+                    <div className="mt-3 border-t border-border pt-2">
+                      <p className="text-[11px] font-semibold text-text-muted">
+                        Sources
+                      </p>
+                      <ul className="mt-1 space-y-1">
+                        {msg.sources.map((source) => (
+                          <li
+                            key={`${source.chunkIndex}-${source.startChar}`}
+                            className="text-[11px] text-text-secondary"
+                          >
+                            {source.fileName ?? "Uploaded document"}
+                            {source.pageNumbers.length > 0
+                              ? ` · page${source.pageNumbers.length > 1 ? "s" : ""} ${source.pageNumbers.join(", ")}`
+                              : ` · text ${source.startChar}–${source.endChar}`}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

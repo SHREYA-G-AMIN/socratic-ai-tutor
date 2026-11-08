@@ -9,12 +9,15 @@ import {
   MAX_PDF_PAGES,
 } from "./constants";
 import { DocumentProcessingError } from "./errors";
+import type { DocumentPageRange } from "@/types/document";
 
 export interface PdfExtraction {
   /** Extracted text, whitespace-normalised and length-capped. */
   text: string;
   /** Number of characters in `text`. */
   characterCount: number;
+  /** One-based page locations for readable text in `text`. */
+  pageRanges: DocumentPageRange[];
   /** Number of pages in the document, or null when the parser cannot tell. */
   pageCount: number | null;
   /** True when the extracted text was cut off at the response limit. */
@@ -42,35 +45,80 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtraction> 
       );
     }
 
-    const { text } = await withTimeout(
-      extractText(document, { mergePages: true }),
+    const { text: pageTexts } = await withTimeout(
+      extractText(document, { mergePages: false }),
       EXTRACTION_TIMEOUT_MS,
       "Text extraction took too long and was stopped.",
     );
 
-    const normalized = normalizeText(text);
+    if (!Array.isArray(pageTexts)) {
+      throw new DocumentProcessingError(
+        "EXTRACTION_FAILED",
+        "The PDF parser did not return page-level text.",
+      );
+    }
 
-    if (normalized.length === 0) {
+    const { text, pageRanges, truncated } = joinPageText(pageTexts);
+
+    if (text.length === 0) {
       throw new DocumentProcessingError(
         "NO_TEXT_CONTENT",
         "No readable text was found in this PDF. It is most likely a scanned document, which needs OCR before it can be used.",
       );
     }
 
-    const truncated = normalized.length > MAX_EXTRACTED_CHARACTERS;
-    const finalText = truncated
-      ? normalized.slice(0, MAX_EXTRACTED_CHARACTERS)
-      : normalized;
-
     return {
-      text: finalText,
-      characterCount: finalText.length,
+      text,
+      characterCount: text.length,
+      pageRanges,
       pageCount,
       truncated,
     };
   } finally {
     await document.loadingTask.destroy();
   }
+}
+
+function joinPageText(pageTexts: string[]): {
+  text: string;
+  pageRanges: DocumentPageRange[];
+  truncated: boolean;
+} {
+  let text = "";
+  let truncated = false;
+  const pageRanges: DocumentPageRange[] = [];
+
+  for (const [index, rawPageText] of pageTexts.entries()) {
+    const pageText = normalizeText(rawPageText);
+
+    if (pageText.length === 0) {
+      continue;
+    }
+
+    const separator = text.length > 0 ? "\n\n" : "";
+    const startChar = text.length + separator.length;
+    const remaining = MAX_EXTRACTED_CHARACTERS - startChar;
+
+    if (remaining <= 0) {
+      truncated = true;
+      break;
+    }
+
+    const pageContent = pageText.slice(0, remaining);
+    text += separator + pageContent;
+    pageRanges.push({
+      pageNumber: index + 1,
+      startChar,
+      endChar: startChar + pageContent.length,
+    });
+
+    if (pageContent.length < pageText.length) {
+      truncated = true;
+      break;
+    }
+  }
+
+  return { text, pageRanges, truncated };
 }
 
 /**
