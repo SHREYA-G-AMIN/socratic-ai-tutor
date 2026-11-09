@@ -46,23 +46,54 @@ export function getDiagramInstructions(
   return `A diagram may help explain this process or sequence. Include at most one concise Mermaid diagram only if the retrieved passages clearly support its nodes and relationships; otherwise answer normally without a diagram. Put Mermaid source in a fenced \`\`\`mermaid code block and keep explanatory prose outside it.`;
 }
 
-export function parseTutorResponse(response: string): ParsedTutorResponse {
+export function parseTutorResponse(
+  response: string,
+  options: { allowDiagram?: boolean } = {},
+): ParsedTutorResponse {
+  const allowDiagram = options.allowDiagram ?? true;
   let diagram: string | undefined;
+  let rejectedDiagram = false;
+  let diagramTooLong = false;
+  let additionalDiagram = false;
   const prose = response.replace(MERMAID_FENCE, (fence, source: string) => {
-    if (diagram === undefined && source.trim()) {
-      diagram = source.trim();
+    if (!allowDiagram) {
+      rejectedDiagram = true;
       return "";
     }
-    return source.trim();
+
+    if (diagram !== undefined || rejectedDiagram || diagramTooLong) {
+      additionalDiagram = true;
+      return "";
+    }
+
+    if (source.trim().length > MAX_MERMAID_SOURCE_LENGTH) {
+      diagramTooLong = true;
+      return "";
+    }
+
+    if (source.trim()) {
+      diagram = source.trim();
+    } else {
+      additionalDiagram = true;
+    }
+
+    return "";
   });
-  const reply = prose.trim().replace(/\n{3,}/g, "\n\n");
+  let reply = prose.trim().replace(/\n{3,}/g, "\n\n");
+  if (additionalDiagram) {
+    reply = `${reply}${reply ? "\n\n" : ""}Additional diagram blocks were omitted.`;
+  } else if (diagramTooLong) {
+    reply = `${reply}${reply ? "\n\n" : ""}The diagram was too long to display.`;
+  }
 
   return {
     reply:
       reply ||
       (diagram
         ? "Here is a visual explanation based on the retrieved passages."
-        : response.trim()),
+        : rejectedDiagram
+          ? "The retrieved passages do not support a reliable diagram for this request."
+          : response.trim()),
     ...(diagram ? { diagram } : {}),
   };
 }

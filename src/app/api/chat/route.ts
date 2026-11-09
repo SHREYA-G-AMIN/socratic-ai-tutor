@@ -5,6 +5,7 @@ import {
 } from "@/lib/ai/tutoring-intent";
 import { detectConfusion } from "@/lib/ai/confusion-detection";
 import {
+  MAX_MERMAID_SOURCE_LENGTH,
   getDiagramRequest,
   parseTutorResponse,
 } from "@/lib/ai/visual-explanations";
@@ -33,7 +34,16 @@ const GEMINI_REQUEST_TIMEOUT_MS = 60_000;
 
 export async function POST(request: Request) {
   try {
-    const body: unknown = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON request body" },
+        { status: 400 },
+      );
+    }
+
     if (!isRecord(body)) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
@@ -155,7 +165,9 @@ export async function POST(request: Request) {
       contents,
       getTutorInstructions(intent, confusion.severity, diagramRequest, sources.length > 0),
     );
-    const tutorResponse = parseTutorResponse(generatedResponse);
+    const tutorResponse = parseTutorResponse(generatedResponse, {
+      allowDiagram: diagramRequest !== "none" && sources.length > 0,
+    });
 
     return NextResponse.json({
       ...tutorResponse,
@@ -200,7 +212,7 @@ function parseChatHistory(value: unknown): GeminiHistoryMessage[] {
 
       const diagram =
         typeof message.diagram === "string"
-          ? `\n\nPrevious visual explanation (Mermaid):\n${message.diagram.slice(0, 8_000)}`
+          ? `\n\nPrevious visual explanation (Mermaid):\n${message.diagram.slice(0, MAX_MERMAID_SOURCE_LENGTH)}`
           : "";
 
       return {

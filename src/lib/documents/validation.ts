@@ -24,9 +24,10 @@ export interface ValidatedPdfUpload {
  * error message rather than a confusing "no file" response.
  */
 export function findUploadedFile(formData: FormData): File {
+  const files = Array.from(formData.values()).filter(isFile);
   const named = formData.getAll(PDF_FILE_FIELD).filter(isFile);
 
-  if (named.length > 1) {
+  if (files.length > 1) {
     throw new DocumentProcessingError(
       "INVALID_REQUEST",
       "Only one file can be uploaded per request.",
@@ -37,16 +38,14 @@ export function findUploadedFile(formData: FormData): File {
     return named[0];
   }
 
-  const fallback = Array.from(formData.values()).filter(isFile);
-
-  if (fallback.length === 0) {
+  if (files.length === 0) {
     throw new DocumentProcessingError(
       "NO_FILE_PROVIDED",
       `No file was uploaded. Send one PDF as multipart/form-data using the "${PDF_FILE_FIELD}" field.`,
     );
   }
 
-  return fallback[0];
+  return files[0];
 }
 
 /**

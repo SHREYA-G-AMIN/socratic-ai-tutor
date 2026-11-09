@@ -81,13 +81,40 @@ test("empty prose around a diagram receives a neutral response", () => {
   );
 });
 
-test("additional Mermaid blocks remain visible as text instead of being discarded", () => {
+test("additional Mermaid blocks are omitted instead of being rendered", () => {
   const parsed = parseTutorResponse(
     "First diagram:\n```mermaid\nflowchart TD\n  A --> B\n```\nSecond:\n```mermaid\nflowchart TD\n  C --> D\n```",
   );
 
   assert.equal(parsed.diagram, "flowchart TD\n  A --> B");
-  assert.match(parsed.reply, /flowchart TD\s+C --> D/);
+  assert.match(parsed.reply, /Additional diagram blocks were omitted/);
+});
+
+test("oversized Gemini diagrams are removed from the API response", () => {
+  const parsed = parseTutorResponse(
+    `Summary.\n\`\`\`mermaid\n${"x".repeat(8_001)}\n\`\`\``,
+  );
+
+  assert.equal(parsed.diagram, undefined);
+  assert.equal(parsed.reply, "Summary.\n\nThe diagram was too long to display.");
+});
+
+test("diagram output is suppressed when it was not warranted or is unsupported", () => {
+  const withProse = parseTutorResponse(
+    "I can explain the topic.\n```mermaid\nflowchart TD\n  Unsupported --> Claim\n```",
+    { allowDiagram: false },
+  );
+  assert.deepEqual(withProse, { reply: "I can explain the topic." });
+
+  assert.deepEqual(
+    parseTutorResponse(
+      "```mermaid\nflowchart TD\n  Unsupported --> Claim\n```",
+      { allowDiagram: false },
+    ),
+    {
+      reply: "The retrieved passages do not support a reliable diagram for this request.",
+    },
+  );
 });
 
 test("valid Mermaid output is returned for rendering", async () => {
