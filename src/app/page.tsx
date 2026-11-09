@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DocumentPreview } from "@/components/DocumentPreview";
+import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { PdfUploader } from "@/components/PdfUploader";
 import type { ChatResponse, ChatSourceReference } from "@/types/chat";
 import type {
@@ -13,6 +14,7 @@ import type {
 interface Message {
   role: "tutor" | "student" | "hint";
   text: string;
+  diagram?: string;
   sources?: ChatSourceReference[];
   warning?: string;
 }
@@ -97,6 +99,7 @@ export default function Home() {
         {
           role: "hint",
           text: chatBody.reply,
+          diagram: chatBody.diagram,
           sources: chatBody.sources,
           warning: chatBody.warning,
         },
@@ -154,6 +157,7 @@ export default function Home() {
         {
           role: "tutor",
           text: chatBody.reply,
+          diagram: chatBody.diagram,
           sources: chatBody.sources,
           warning: chatBody.warning,
         },
@@ -334,6 +338,7 @@ export default function Home() {
                   }`}
                 >
                   <p>{msg.text}</p>
+                  {msg.diagram && <MermaidDiagram source={msg.diagram} />}
                   {msg.warning && (
                     <p className="mt-2 border-t border-border pt-2 text-xs text-text-muted">
                       {msg.warning}

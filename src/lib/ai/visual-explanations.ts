@@ -19,12 +19,7 @@ const MERMAID_FENCE = /```mermaid\s*\r?\n([\s\S]*?)```/gi;
 
 export function getDiagramRequest(
   message: string,
-  hasRetrievedPassages: boolean,
 ): DiagramRequest {
-  if (!hasRetrievedPassages) {
-    return "none";
-  }
-
   if (EXPLICIT_DIAGRAM_REQUEST.test(message)) {
     return "required";
   }
@@ -36,7 +31,11 @@ export function getDiagramInstructions(
   request: DiagramRequest,
   hasRetrievedPassages: boolean,
 ): string {
-  if (request === "none" || !hasRetrievedPassages) {
+  if (!hasRetrievedPassages) {
+    return `No retrieved passages support a course-specific diagram. If the student requested one, explain that the available document passages do not support a reliable visual explanation. Do not invent nodes, steps, or relationships and do not include a Mermaid block.`;
+  }
+
+  if (request === "none") {
     return `Do not include a Mermaid diagram in this response. Retrieved passages are the only allowed source for course-specific claims.`;
   }
 

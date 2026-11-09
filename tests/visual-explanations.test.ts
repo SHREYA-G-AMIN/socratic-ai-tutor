@@ -3,33 +3,37 @@ import assert from "node:assert/strict";
 
 import {
   getDiagramRequest,
+  getDiagramInstructions,
   parseTutorResponse,
   renderMermaidSafely,
 } from "../src/lib/ai/visual-explanations.ts";
 
 test("explicit diagram requests require a diagram when passages are available", () => {
-  assert.equal(getDiagramRequest("Draw a flowchart of the process", true), "required");
-  assert.equal(getDiagramRequest("Make a concept map", true), "required");
+  assert.equal(getDiagramRequest("Draw a flowchart of the process"), "required");
+  assert.equal(getDiagramRequest("Make a concept map"), "required");
 });
 
 test("process and sequence questions can benefit from an optional diagram", () => {
   assert.equal(
-    getDiagramRequest("What are the steps in cellular respiration?", true),
+    getDiagramRequest("What are the steps in cellular respiration?"),
     "optional",
   );
   assert.equal(
-    getDiagramRequest("How does the water cycle work?", true),
+    getDiagramRequest("How does the water cycle work?"),
     "optional",
   );
 });
 
 test("ordinary questions do not request diagrams", () => {
-  assert.equal(getDiagramRequest("What is ATP?", true), "none");
+  assert.equal(getDiagramRequest("What is ATP?"), "none");
 });
 
 test("missing retrieved passages prevent diagram requests", () => {
-  assert.equal(getDiagramRequest("Draw a flowchart", false), "none");
-  assert.equal(getDiagramRequest("Explain the steps", false), "none");
+  assert.equal(getDiagramRequest("Draw a flowchart"), "required");
+  assert.match(
+    getDiagramInstructions(getDiagramRequest("Draw a flowchart"), false),
+    /do not include a Mermaid block/i,
+  );
 });
 
 test("Gemini Mermaid fences are separated from prose without changing plain replies", () => {
