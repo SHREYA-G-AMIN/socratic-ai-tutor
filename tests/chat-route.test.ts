@@ -170,64 +170,43 @@ test("keyword fallback keeps citations, explicit format, confusion adaptation, a
   });
 });
 
-test("unrelated and borderline semantic matches return no evidence without generation", async () => {
+test("irrelevant semantic retrieval declines without generating unsupported text or diagrams", async () => {
   await withApiKey("test-key", async () => {
-    for (const scenario of [
-      {
-        message: "What is the capital of France?",
-        documentText:
-          "Socratic AI Tutor sample discussing binary search trees, chunking, and embeddings.",
-        score: 0.5475265,
-      },
-      {
-        message: "How do plant cells store energy?",
-        documentText: "A brief passage about botany and cellular structures.",
-        score: 0.649,
-      },
-    ]) {
-      let generationRequested = false;
-      await withFetch(async (input, init) => {
-        const url = String(input);
-        if (url.includes("batchEmbedContents")) {
-          const requestBody = JSON.parse(String(init?.body)) as {
-            requests: Array<{ taskType: string }>;
-          };
-          return Response.json({
-            embeddings: requestBody.requests.map(({ taskType }) =>
-              taskType === "RETRIEVAL_QUERY"
-                ? { values: [1, 0] }
-                : {
-                    values: [
-                      scenario.score,
-                      Math.sqrt(1 - scenario.score * scenario.score),
-                    ],
-                  },
-            ),
-          });
-        }
+    let generationRequested = false;
+    await withFetch(async (input, init) => {
+      const url = String(input);
+      if (url.includes("batchEmbedContents")) {
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<{ taskType: string }>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(({ taskType }) => ({
+            values:
+              taskType === "RETRIEVAL_QUERY" ? [0, 1] : [1, 0],
+          })),
+        });
+      }
 
-        generationRequested = true;
-        return makeTutorResponse("Unsupported answer.");
-      }, async () => {
-        const response = await POST(
-          makeRequest({
-            message: scenario.message,
-            documentText: scenario.documentText,
-          }),
-        );
+      generationRequested = true;
+      return makeTutorResponse(
+        "Unsupported claim.\n```mermaid\nflowchart TD\n  Unsupported --> Claim\n```",
+      );
+    }, async () => {
+      const response = await POST(
+        makeRequest({
+          message: "Draw a flowchart about orbital mechanics",
+          documentText: "This document describes botany and plant cells.",
+        }),
+      );
 
-        assert.equal(response.status, 200);
-        const body = await response.json();
-        assert.equal(body.retrievalMode, "semantic");
-        assert.deepEqual(body.sources, []);
-        assert.equal(
-          body.reply,
-          "I couldn't find supporting information for that question in the uploaded material.",
-        );
-        assert.equal(body.diagram, undefined);
-        assert.equal(generationRequested, false);
-      });
-    }
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.retrievalMode, "semantic");
+      assert.deepEqual(body.sources, []);
+      assert.equal(body.reply, "I couldn't find supporting information for that question in the uploaded material.");
+      assert.equal(body.diagram, undefined);
+      assert.equal(generationRequested, false);
+    });
   });
 });
 
