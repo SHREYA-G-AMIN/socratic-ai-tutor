@@ -2,7 +2,7 @@ import type { ConfusionSeverity } from "./confusion-detection";
 import {
   getDiagramInstructions,
   type DiagramRequest,
-} from "./visual-explanations";
+} from "./visual-explanations.ts";
 
 export type TutoringIntent = "summary" | "direct" | "socratic";
 

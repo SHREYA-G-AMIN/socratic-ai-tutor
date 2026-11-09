@@ -36,6 +36,25 @@ test("missing retrieved passages prevent diagram requests", () => {
   );
 });
 
+test("diagram instructions are selective and passage-grounded", () => {
+  assert.match(
+    getDiagramInstructions("none", true),
+    /Do not include a Mermaid diagram/i,
+  );
+  assert.match(
+    getDiagramInstructions("optional", true),
+    /only if the retrieved passages clearly support/i,
+  );
+  assert.match(
+    getDiagramInstructions("required", true),
+    /explicitly requested a visual explanation/i,
+  );
+  assert.match(
+    getDiagramInstructions("required", false),
+    /do not invent nodes, steps, or relationships/i,
+  );
+});
+
 test("Gemini Mermaid fences are separated from prose without changing plain replies", () => {
   const parsed = parseTutorResponse(
     "The process has two stages.\n\n```mermaid\nflowchart TD\n  A --> B\n```\n\nBoth stages are described in the document.",
@@ -60,6 +79,15 @@ test("empty prose around a diagram receives a neutral response", () => {
       diagram: "flowchart TD\n  A --> B",
     },
   );
+});
+
+test("additional Mermaid blocks remain visible as text instead of being discarded", () => {
+  const parsed = parseTutorResponse(
+    "First diagram:\n```mermaid\nflowchart TD\n  A --> B\n```\nSecond:\n```mermaid\nflowchart TD\n  C --> D\n```",
+  );
+
+  assert.equal(parsed.diagram, "flowchart TD\n  A --> B");
+  assert.match(parsed.reply, /flowchart TD\s+C --> D/);
 });
 
 test("valid Mermaid output is returned for rendering", async () => {

@@ -149,7 +149,7 @@ export async function POST(request: Request) {
         text: turn.parts.map((part) => part.text).join(""),
       })),
     );
-    const diagramRequest = getDiagramRequest(message.trim(), sources.length > 0);
+    const diagramRequest = getDiagramRequest(message.trim());
     const generatedResponse = await generateTutorReply(
       apiKey,
       contents,

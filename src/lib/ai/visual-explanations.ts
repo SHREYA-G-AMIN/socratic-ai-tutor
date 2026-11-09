@@ -51,10 +51,11 @@ export function parseTutorResponse(response: string): ParsedTutorResponse {
   const prose = response.replace(MERMAID_FENCE, (fence, source: string) => {
     if (diagram === undefined && source.trim()) {
       diagram = source.trim();
+      return "";
     }
-    return "";
+    return source.trim();
   });
-  const reply = prose.trim();
+  const reply = prose.trim().replace(/\n{3,}/g, "\n\n");
 
   return {
     reply:
