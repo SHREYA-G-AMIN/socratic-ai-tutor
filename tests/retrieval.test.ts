@@ -199,7 +199,7 @@ test("semantic retrieval ranks by cosine similarity and includes page metadata",
   const firstChunk = chunks[0];
   const results = await retrieveSemanticallyRelevantChunks(
     chunks,
-    "How do vectors work?",
+    "How do vectors and matrices work?",
     {
       embedder,
       model: "test-semantic-ranking-model",
@@ -233,6 +233,81 @@ test("semantic retrieval excludes unrelated chunks below the similarity threshol
   );
 
   assert.deepEqual(results, []);
+});
+
+test("semantic retrieval rejects a high cosine score without content-term corroboration", async () => {
+  const chunks = chunkText(
+    "A binary search tree stores keys for efficient lookup.",
+    { chunkSize: 100, chunkOverlap: 0 },
+  );
+  const embedder = async (_texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY"
+      ? [[1, 0]]
+      : [[0.55, Math.sqrt(1 - 0.55 ** 2)]];
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "What is the capital of France?",
+    { embedder, model: "test-uncorroborated-similarity-model" },
+  );
+
+  assert.deepEqual(results, []);
+});
+
+test("semantic retrieval keeps lexically corroborated passages at the existing cutoff", async () => {
+  const chunks = chunkText(
+    "A binary search tree stores keys for efficient lookup.",
+    { chunkSize: 100, chunkOverlap: 0 },
+  );
+  const embedWithScore = (score: number) => async (
+    _texts: string[],
+    taskType: string,
+  ) =>
+    taskType === "RETRIEVAL_QUERY"
+      ? [[1, 0]]
+      : [[score, Math.sqrt(1 - score ** 2)]];
+
+  const atCutoff = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "Explain binary search trees",
+    {
+      embedder: embedWithScore(0.35),
+      model: "test-at-semantic-cutoff-model",
+    },
+  );
+  const belowCutoff = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "Explain binary search trees",
+    {
+      embedder: embedWithScore(0.349),
+      model: "test-below-semantic-cutoff-model",
+    },
+  );
+
+  assert.equal(atCutoff.length, 1);
+  assert.ok(atCutoff[0].score >= 0.35);
+  assert.deepEqual(belowCutoff, []);
+});
+
+test("document-wide summaries can use semantic passages without query-term overlap", async () => {
+  const chunks = chunkText(
+    "A binary search tree stores keys for efficient lookup.",
+    { chunkSize: 100, chunkOverlap: 0 },
+  );
+  const embedder = async (_texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY" ? [[1, 0]] : [[1, 0]];
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "Summarize my PDF",
+    {
+      embedder,
+      model: "test-document-summary-model",
+      requireLexicalCorroboration: false,
+    },
+  );
+
+  assert.equal(results.length, 1);
 });
 
 test("semantic retrieval leaves page numbers empty when source metadata is missing", async () => {

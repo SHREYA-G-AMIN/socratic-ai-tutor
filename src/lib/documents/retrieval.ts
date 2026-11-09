@@ -13,6 +13,32 @@ import {
 const MINIMUM_SEMANTIC_SIMILARITY = 0.35;
 const MAX_CACHED_DOCUMENTS = 2;
 const documentEmbeddingCache = new Map<string, Promise<number[][]>>();
+const NON_CONTENT_QUERY_TERMS = new Set([
+  "about",
+  "after",
+  "also",
+  "does",
+  "from",
+  "have",
+  "into",
+  "please",
+  "that",
+  "their",
+  "them",
+  "there",
+  "these",
+  "they",
+  "this",
+  "those",
+  "through",
+  "what",
+  "when",
+  "where",
+  "which",
+  "while",
+  "with",
+  "would",
+]);
 
 /**
  * A single chunk together with its relevance score for a query.
@@ -125,6 +151,7 @@ export async function retrieveSemanticallyRelevantChunks(
     pageRanges?: DocumentPageRange[];
     embedder?: EmbeddingBatch;
     model?: string;
+    requireLexicalCorroboration?: boolean;
   } = {},
 ): Promise<RetrievalResult[]> {
   if (chunks.length === 0 || !message.trim()) {
@@ -156,6 +183,9 @@ export async function retrieveSemanticallyRelevantChunks(
     throw new Error("The embedding provider returned no query embedding.");
   }
 
+  const queryTerms = getContentQueryTerms(message);
+  const requireLexicalCorroboration =
+    options.requireLexicalCorroboration ?? true;
   const results = chunks
     .map((chunk, index) => {
       const documentVector = documentVectors[index];
@@ -165,6 +195,7 @@ export async function retrieveSemanticallyRelevantChunks(
 
       return {
         chunk: chunk.text,
+        contentTerms: new Set(getContentQueryTerms(chunk.text)),
         score: cosineSimilarity(queryVector, documentVector),
         index: chunk.index,
         start: chunk.start,
@@ -172,10 +203,30 @@ export async function retrieveSemanticallyRelevantChunks(
         pageNumbers: getPageNumbers(chunk, options.pageRanges ?? []),
       };
     })
-    .filter((result) => result.score >= MINIMUM_SEMANTIC_SIMILARITY)
+    .filter(
+      (result) =>
+        result.score >= MINIMUM_SEMANTIC_SIMILARITY &&
+        (!requireLexicalCorroboration ||
+          queryTerms.length === 0 ||
+          queryTerms.some((term) => result.contentTerms.has(term))),
+    )
+    .map(({ contentTerms: _contentTerms, ...result }) => result)
     .sort((left, right) => right.score - left.score || left.index - right.index);
 
   return results.slice(0, options.maxResults ?? 3);
+}
+
+function getContentQueryTerms(text: string): string[] {
+  return [
+    ...new Set(
+      text
+        .toLowerCase()
+        .match(/[a-z0-9]+/g)
+        ?.filter(
+          (term) => term.length > 3 && !NON_CONTENT_QUERY_TERMS.has(term),
+        ) ?? [],
+    ),
+  ];
 }
 
 export function cosineSimilarity(left: number[], right: number[]): number {

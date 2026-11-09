@@ -91,6 +91,18 @@ test("adaptive direct formats remain direct for explanations, definitions, compa
   assert.match(instructions, /do not ask a follow-up question/i);
 });
 
+test("adaptive explanations acknowledge missing evidence and forbid invented prerequisites or examples", () => {
+  const moderateInstructions = getTutorInstructions("socratic", "moderate");
+  const highInstructions = getTutorInstructions("direct", "high");
+
+  assert.match(moderateInstructions, /do not use prior knowledge/i);
+  assert.match(moderateInstructions, /example only when the retrieved passages support/i);
+  assert.match(moderateInstructions, /uploaded material does not explain it/i);
+  assert.match(highInstructions, /explain a prerequisite only if the retrieved passages establish it/i);
+  assert.match(highInstructions, /acknowledge that limitation/i);
+  assert.match(highInstructions, /do not turn the response into a hint or Socratic question/i);
+});
+
 test("mild confusion adapts Socratic guidance with simpler wording and a small hint", () => {
   const instructions = getTutorInstructions("socratic", "mild");
 

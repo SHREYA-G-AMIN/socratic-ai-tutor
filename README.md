@@ -43,7 +43,7 @@ Socratic AI Tutor aims to provide a more personalized learning experience throug
 | Styling | Tailwind CSS 4 and theme tokens | Responsive light/dark styling |
 | Tutor and embeddings | Gemini `gemini-3.5-flash-lite`, `gemini-embedding-001` | One chat generation call and semantic retrieval |
 | PDF processing | `unpdf` | Server-side text and page-range extraction |
-| Retrieval | Cosine similarity with in-memory embedding cache; keyword fallback | Select relevant passages and citations |
+| Retrieval | Cosine similarity with in-memory embedding cache; lexical corroboration; keyword fallback | Select relevant passages and citations |
 | Diagrams | Mermaid 12 | Render optional, passage-grounded diagrams |
 
 No database or durable conversation store is currently configured. The Gemini
@@ -53,7 +53,7 @@ model can be overridden with `GEMINI_EMBEDDING_MODEL`.
 ## System Workflow
 
 1. The upload route validates a PDF, extracts readable text and page ranges, and returns them to the browser. Scanned PDFs without a text layer are rejected.
-2. The chat route chunks the extracted text and retrieves relevant passages using Gemini embeddings; on embedding failure, it falls back to keyword matching.
+2. The chat route chunks the extracted text and retrieves passages using Gemini embeddings. Question-focused semantic matches must meet the existing cosine cutoff and share at least one content term with the question; document-wide summary requests do not require term overlap. On embedding failure, keyword matching is used.
 3. If no passages are found, the route returns a fixed no-evidence response without calling Gemini.
 4. Otherwise, it sends retrieved passages, intent/adaptation instructions, and the existing conversation history to Gemini once.
 5. The response includes tutor text, citations, retrieval mode, optional warning, and an optional Mermaid diagram.
@@ -108,6 +108,7 @@ socratic-ai-tutor/
 ## Current Limitations
 
 - Confusion detection uses phrase patterns and exact normalized question repeats; paraphrase/sentiment recognition is not implemented.
+- Semantic matching also requires lexical corroboration for question-focused requests. This can decline relevant passages when a question uses only synonyms or abbreviations absent from the PDF; document-wide summaries are exempt from the overlap check.
 - Gemini grounding and diagram correctness are instructed and no-evidence outputs are suppressed, but supported prose is not deterministically fact-checked.
 - Embedding cache is in-process and bounded; it is not durable across restarts or instances.
 - No OCR, database, persisted chat history, or deployment configuration is included.

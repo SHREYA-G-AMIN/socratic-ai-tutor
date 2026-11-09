@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const intent = detectTutoringIntent(message.trim());
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -101,6 +102,7 @@ export async function POST(request: Request) {
         {
           maxResults: MAX_RETRIEVED_CHUNKS,
           pageRanges,
+          requireLexicalCorroboration: intent !== "summary",
         },
       );
     } catch (error) {
@@ -161,7 +163,6 @@ export async function POST(request: Request) {
       contents.shift();
     }
 
-    const intent = detectTutoringIntent(message.trim());
     const confusion = detectConfusion(
       message.trim(),
       history.map((turn) => ({

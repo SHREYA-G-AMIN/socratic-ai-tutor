@@ -170,7 +170,7 @@ test("keyword fallback keeps citations, explicit format, confusion adaptation, a
   });
 });
 
-test("irrelevant semantic retrieval declines without generating unsupported text or diagrams", async () => {
+test("high-scoring unrelated semantic retrieval declines without Gemini or misleading citations", async () => {
   await withApiKey("test-key", async () => {
     let generationRequested = false;
     await withFetch(async (input, init) => {
@@ -181,8 +181,9 @@ test("irrelevant semantic retrieval declines without generating unsupported text
         };
         return Response.json({
           embeddings: requestBody.requests.map(({ taskType }) => ({
-            values:
-              taskType === "RETRIEVAL_QUERY" ? [0, 1] : [1, 0],
+            values: taskType === "RETRIEVAL_QUERY"
+              ? [1, 0]
+              : [0.55, Math.sqrt(1 - 0.55 ** 2)],
           })),
         });
       }
@@ -194,8 +195,8 @@ test("irrelevant semantic retrieval declines without generating unsupported text
     }, async () => {
       const response = await POST(
         makeRequest({
-          message: "Draw a flowchart about orbital mechanics",
-          documentText: "This document describes botany and plant cells.",
+          message: "What is the capital of France?",
+          documentText: "A binary search tree stores keys for efficient lookup.",
         }),
       );
 
@@ -203,9 +204,48 @@ test("irrelevant semantic retrieval declines without generating unsupported text
       const body = await response.json();
       assert.equal(body.retrievalMode, "semantic");
       assert.deepEqual(body.sources, []);
-      assert.equal(body.reply, "I couldn't find supporting information for that question in the uploaded material.");
+      assert.equal(
+        body.reply,
+        "I couldn't find supporting information for that question in the uploaded material.",
+      );
       assert.equal(body.diagram, undefined);
       assert.equal(generationRequested, false);
+    });
+  });
+});
+
+test("a document summary can retrieve relevant passages without lexical overlap", async () => {
+  await withApiKey("test-key", async () => {
+    let generationRequested = false;
+    await withFetch(async (input, init) => {
+      const url = String(input);
+      if (url.includes("batchEmbedContents")) {
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<{ taskType: string }>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(() => ({ values: [1, 0] })),
+        });
+      }
+
+      generationRequested = true;
+      return makeTutorResponse("**Overview**\nThe passage describes binary search trees.");
+    }, async () => {
+      const response = await POST(
+        makeRequest({
+          message: "Summarize my PDF",
+          documentText: "A binary search tree stores keys for efficient lookup.",
+          fileName: "algorithms.pdf",
+        }),
+      );
+
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.retrievalMode, "semantic");
+      assert.match(body.reply, /Overview/);
+      assert.equal(body.sources.length, 1);
+      assert.equal(body.sources[0].fileName, "algorithms.pdf");
+      assert.equal(generationRequested, true);
     });
   });
 });

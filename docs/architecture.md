@@ -37,9 +37,14 @@ locations.
 
 ### 3.3 Retrieval System
 Converts document chunks and questions into retrieval embeddings and ranks
-chunks by cosine similarity. If the embedding provider is unavailable, the
-chat route uses the existing keyword retriever and marks the response as a
-keyword fallback.
+chunks by cosine similarity, using the existing 0.35 minimum cosine score.
+Question-focused semantic matches must also share at least one content term
+with the current question before they can become sources. Document-wide summary
+requests skip this overlap check because the request concerns the uploaded
+document as a whole. If the embedding provider is unavailable, the chat route
+uses the existing keyword retriever and marks the response as a keyword
+fallback. The overlap check may reject valid semantic matches phrased only with
+synonyms or abbreviations not present in the PDF.
 
 ### 3.4 AI Tutor
 Receives the student's question and retrieved document passages through the
@@ -66,14 +71,16 @@ sessions, process restarts, or reliably across server instances.
 ### Document Upload
 1. The frontend sends a PDF to the backend.
 2. The backend validates the file.
-3. The PDF text is extracted and split into chunks.
-4. The extracted text and page character ranges are returned to the frontend.
+3. The PDF text is extracted and page character ranges are returned to the frontend.
 5. On the first question, the server embeds the chunks and caches their vectors
    in process memory; subsequent questions reuse them when the cache is warm.
 
 ### Question and Answer
 1. The student submits a question.
-2. The backend retrieves relevant document chunks.
+2. The backend retrieves relevant document chunks. A question-focused semantic
+   candidate must meet the cosine cutoff and include a content term shared
+   with the question; document-wide summary requests are exempt from the
+   overlap requirement. Keyword fallback uses its existing keyword matches.
 3. If no passages are found, the route returns a fixed no-evidence response and
    does not ask Gemini to generate unsupported course claims.
 4. Otherwise, the chat route sends the retrieved passages, role-filtered
@@ -98,6 +105,9 @@ for the source chunk.
    cues, smaller steps and a passage-grounded example for moderate cues, or a
    slower explanation of passage-supported prerequisites with a supportive
    tone for high cues.
+   The tutor may rephrase or reorganize passage content, but must not supply
+   missing facts or prerequisites from prior knowledge; it should state when
+   the PDF does not explain a necessary detail.
 4. An explicit request for a summary, explanation, definition, comparison, or
    list, including when a support cue is present, keeps its requested format;
    adaptation changes complexity and pacing, not the requested task.
