@@ -5,116 +5,127 @@
 
 ## Status Key and Audit Basis
 
-- **Complete** — implemented and verified with available automated checks.
-- **Partial** — implementation exists, but verification or a planned capability remains.
-- **Not started** — no implementation or completion evidence was found.
+- **Complete** — implemented and verified with the available checks.
+- **Partial** — some implementation exists, but requirements or verification are missing.
+- **Not started** — no implementation or evidence of completed research was found.
 
-Statuses reflect the source and tests reviewed on 2026-11-09. Browser end-to-end
-testing and deployment were not performed.
+The initial status reflects the repository audit on 2026-11-08. The Week 3 tutoring/adaptation and related test statuses were updated on 2026-11-09 after implementation; other historical status entries have not been re-audited.
 
 ## Week 1 — Research and Project Setup
 
 ### Project Planning
-- [Partial] Review and finalise requirements — PRD and user requirements are documented; formal review/sign-off is not evidenced.
-- [Not started] Research existing AI tutors and document differentiating requirements.
-- [Partial] Research confusion and frustration detection — a deterministic cue-based implementation exists, but no comparative research report is documented.
-- [Partial] Compare LLM and embedding providers — Gemini is selected and integrated; no provider comparison is documented.
-- [Partial] Decide document processing and storage — PDF extraction uses `unpdf`; durable document/chunk storage is not implemented.
-- [Complete] Document the implemented architecture and request flow (`docs/architecture.md`).
+- [Partial] Review and finalise the requirements — PRD and user requirements are documented, but review/sign-off is not evidenced (`docs/prd.md`, `docs/user-requirements.md`).
+- [Not started] Research existing AI tutors and identify what our implementation should do differently — no research findings found.
+- [Not started] Research text-based confusion and frustration detection — no research findings or detection implementation found.
+- [Not started] Compare available LLM and embedding options — no comparison found; no LLM or embedding integration exists.
+- [Partial] Decide the PDF processing and document storage approach — PDF extraction uses `unpdf`; persistent document/chunk storage has not been selected or implemented (`src/lib/documents/pdf-extractor.ts`).
+- [Partial] Finalise the initial architecture — an architecture document exists, but its proposed LLM, embeddings, retrieval, and storage flow is not implemented (`docs/architecture.md`).
 
 ### Development Setup
-- [Complete] Create the Next.js application with TypeScript.
-- [Complete] Configure Tailwind CSS and theme styles.
-- [Partial] Set up repository collaboration workflow — the repository exists; a collaboration workflow is not evidenced.
-- [Complete] Implement PDF upload and chat UI, including source references, hints, and diagrams.
-- [Complete] Document server-side Gemini environment variables in `.env.example`.
+- [Complete] Create the Next.js application with TypeScript — application and TypeScript configuration exist.
+- [Complete] Configure Tailwind CSS — dependency and application styles are present.
+- [Partial] Set up the GitHub repository and collaboration workflow — the repository exists; a collaboration workflow is not evidenced.
+- [Partial] Create the basic home page and chat layout — the responsive upload/chat UI exists, but the chat is not yet a tutoring conversation (`src/app/page.tsx`).
+- [Not started] Configure environment variables — no environment template or AI-service configuration was found.
 
-**Milestone: Partial** — the application is implemented; comparative research,
-formal sign-off, and collaboration process remain.
+**Milestone: Partial** — the application runs and has a basic UI; research, final decisions, and a working tutor are outstanding.
 
 ## Week 2 — PDF Processing and Retrieval
 
 ### Document Handling
-- [Complete] Upload and validate PDFs — size, file signature, empty file, and single-file checks are implemented.
-- [Complete] Extract and normalize PDF text page by page with configured page and character limits.
-- [Complete] Chunk extracted text with overlap for retrieval.
-- [Complete] Reject empty, textless, and corrupted documents with explicit errors.
-- [Partial] Support scanned PDFs — OCR is not implemented.
-- [Partial] Test varied PDF study materials — the upload smoke test covers a readable sample and common invalid files; broader corpus testing is outstanding.
+- [Complete] Implement PDF upload — frontend and server endpoint are connected; upload smoke test passed (`src/components/PdfUploader.tsx`, `src/app/api/documents/upload/route.ts`).
+- [Complete] Validate uploaded files — checks include size, PDF signature, and empty files; invalid upload cases passed the smoke test (`src/lib/documents/validation.ts`).
+- [Complete] Extract text from PDFs — server-side extraction, normalization, page limits, and output cap are implemented; the smoke test extracted the sample PDF (`src/lib/documents/pdf-extractor.ts`).
+- [Complete] Divide extracted text into searchable chunks — overlapping chunks are implemented and covered by unit tests (`src/lib/documents/chunker.ts`).
+- [Complete] Handle empty or unreadable documents — empty, textless, and corrupted PDFs are rejected with errors in the smoke test. Scanned PDFs require OCR, which is not supported.
 
-### Retrieval and Chat
-- [Complete] Embed chunks and student queries with Gemini retrieval-specific task types.
-- [Partial] Store chunk embeddings — a process-memory cache exists; there is no durable vector store.
-- [Complete] Retrieve semantically relevant chunks using cosine similarity.
-- [Complete] Fall back to keyword retrieval when embeddings are unavailable and expose the retrieval mode/warning.
-- [Complete] Send the question and retrieved passages to Gemini through the existing chat API.
-- [Partial] Handle unsupported questions — empty retrieval is explicit and citations remain empty, but grounding is prompt-based rather than mechanically verified.
-- [Complete] Return source citations with passage text and character offsets; include page references when available.
+### Retrieval and AI
+- [Not started] Set up the embedding model — no embedding code or dependency found.
+- [Not started] Store document chunks and their embeddings — no database or persistent storage implementation found.
+- [Partial] Retrieve content relevant to a question — keyword-overlap retrieval is implemented and unit-tested; it is not semantic retrieval and may miss relevant passages with different wording (`src/lib/documents/retrieval.ts`).
+- [Not started] Integrate the LLM API — `/api/chat` does not call an LLM.
+- [Not started] Generate answers using retrieved document content — the API returns matching excerpts, not generated answers (`src/app/api/chat/route.ts`).
+- [Partial] Handle questions that are not supported by the uploaded material — the API returns a “could not find relevant passages” message when no keywords match; this is not model-based grounding or a semantic support check.
 
-**Milestone: Complete** — PDF extraction, chunking, semantic retrieval, fallback,
-and Gemini response generation are wired. OCR and durable storage remain out of
-scope.
+### Interface Integration
+- [Complete] Connect PDF upload to the backend — wired and verified by the upload smoke test.
+- [Partial] Build the basic chat interaction — messages reach `/api/chat`, but only the current message and full document text are sent; replies are excerpts, not tutor responses.
+- [Partial] Display loading and error states — upload and chat UI states exist, but chat behavior has no route/UI integration tests.
+
+**Milestone: Partial** — a PDF can be uploaded, extracted, chunked, and searched by keywords; LLM-based question answering is not implemented.
 
 ## Week 3 — Socratic Tutoring and Adaptation
 
-### Tutoring Intent and Conversation
-- [Complete] Preserve Socratic guidance for ordinary learning questions.
-- [Complete] Detect direct requests for summaries, explanations, definitions, comparisons, and lists.
-- [Complete] Avoid forcing a follow-up question for explicit direct-information requests.
-- [Complete] Pass filtered conversation history to Gemini and retain diagram source in prior tutor turns.
-- [Partial] Provide progressive hints — a contextual Hint action exists, but there is no multi-stage hint ladder.
-- [Partial] Avoid revealing full solutions prematurely — instructions guide ordinary questions; no deterministic disclosure check exists.
+### Socratic Tutoring
+- [Complete] Design and test tutoring instructions — intent-specific Gemini system instructions and unit tests cover direct and Socratic behavior (`src/lib/ai/tutoring-intent.ts`, `tests/tutoring-intent.test.ts`).
+- [Partial] Implement guiding questions and progressive hints — a Hint button adds one fixed, tree-specific message; there is no contextual Socratic guidance (`src/app/page.tsx`).
+- [Complete] Maintain relevant conversation context — the chat API passes prior student/tutor turns to Gemini and uses recent student turns for support detection (`src/app/api/chat/route.ts`).
+- [Partial] Allow students to request additional help — the fixed Hint button exists, but it does not request or generate context-aware help.
+- [Not started] Avoid revealing complete solutions too early — no tutor or response policy is implemented.
 
-### Confusion and Adaptive Explanations
-- [Complete] Detect explicit confusion, simpler-wording requests, repeated questions, unsuccessful-attempt language, and frustration statements from bounded conversation history.
-- [Complete] Select none/mild/moderate/high support and adapt the existing Gemini instructions, not a separate model pipeline.
-- [Complete] Adapt explicit response formats without overriding the requested summary, definition, comparison, or explanation.
-- [Complete] Test confusion cues, severity, adaptive instructions, and explicit-intent compatibility.
-- [Partial] Evaluate detection against broader student language — the rule-based detector is not sentiment analysis and may miss paraphrased cues.
+### Adaptive Learning
+- [Partial] Research and select a practical text-based difficulty detection approach — a deterministic, rule-based cue detector is implemented; no separate research comparison is documented (`src/lib/ai/confusion-detection.ts`).
+- [Complete] Identify explicit confusion signals and repeated requests for help — detects explicit confusion, simplification requests, and repeated normalized questions (`src/lib/ai/confusion-detection.ts`).
+- [Complete] Track repeated unsuccessful attempts where applicable — recent student turns are inspected for explicit unsuccessful-attempt cues; correctness is not inferred (`src/lib/ai/confusion-detection.ts`).
+- [Complete] Implement simpler explanations and smaller learning steps — none/mild/moderate/high support instructions adapt the existing Gemini call while preserving explicit request formats (`src/lib/ai/tutoring-intent.ts`, `src/app/api/chat/route.ts`).
+- [Complete] Test when the tutor should change its strategy — unit tests cover cue detection, severity, adaptive instructions, and explicit-intent compatibility (`tests/confusion-detection.test.ts`, `tests/tutoring-intent.test.ts`).
 
 ### Visual Support
-- [Complete] Generate Mermaid flowcharts, concept maps, process diagrams, or stepwise breakdowns only when requested or pedagogically useful.
-- [Complete] Ground diagram instructions in retrieved passages and prohibit unsupported nodes or relationships.
-- [Complete] Render diagrams in the chat UI with strict Mermaid settings and light/dark theme styles.
-- [Complete] Fall back to escaped Mermaid source on invalid or oversized diagrams.
-- [Complete] Test diagram decisions, Mermaid extraction, response handling, and rendering fallback.
+- [Complete] Choose a simple approach for diagrams or flowcharts — Mermaid source is generated by the existing Gemini chat call and rendered by the client with strict security settings (`src/lib/ai/visual-explanations.ts`, `src/components/MermaidDiagram.tsx`).
+- [Complete] Add basic visual explanations for suitable topics — explicit requests and suitable process/sequence questions can produce passage-grounded diagrams; ordinary responses do not (`src/app/api/chat/route.ts`, `src/lib/ai/tutoring-intent.ts`).
+- [Complete] Render diagrams and handle invalid syntax — active theme tokens style diagrams; renderer failures and source over the size limit show escaped text (`src/components/MermaidDiagram.tsx`).
+- [Complete] Test diagram decisions and response handling — unit tests cover request decisions, Mermaid extraction, renderer validation, and fallback behavior (`tests/visual-explanations.test.ts`).
 
-**Milestone: Complete** — intent-aware tutoring, confusion adaptation, and
-conditional Mermaid explanations are integrated into the existing chat flow.
-Model grounding remains prompt-based.
+**Milestone: Partial** — intent-aware tutoring, confusion-based adaptation, and Mermaid visual explanations are implemented and unit-tested. Broader end-to-end chat-flow testing remains outstanding.
 
 ## Week 4 — Integration, Testing, and Deployment
 
-### Integration Audit
-- [Complete] Audit upload, extraction, chunking, retrieval, Gemini chat, citations, history, adaptation, diagrams, and UI integration.
-- [Complete] Return HTTP 400 for malformed JSON chat requests.
-- [Complete] Restrict repeated-message confusion detection to question-like text.
-- [Complete] Test missing API keys, invalid chat inputs, retrieval fallback, irrelevant questions, explicit confused summaries, history, citations, and malformed Mermaid responses at the API route.
-- [Partial] Exercise the complete UI in a browser — automated browser end-to-end coverage is not configured.
-- [Partial] Review API security and resource limits — upload checks exist; chat request-body limits and document/chat access controls are not implemented.
+### Integration
+- [Partial] Connect all features into one application — upload, retrieval, Gemini tutoring, confusion adaptation, and visual explanations are wired; broader end-to-end testing and other planned features remain.
+- [Partial] Improve the user interface and mobile layout — responsive layout and theme controls exist, but the learning flow is incomplete and mobile behavior is not tested.
+- [Partial] Add appropriate loading, error, and empty states — upload/chat loading and error UI exists; end-to-end state behavior is not tested.
+- [Partial] Review API validation and security — upload validation and limits are implemented; chat request shape/size is not validated, and document/chat access controls are not implemented.
 
-### Validation and Delivery
-- [Partial] Run type-check, lint, all tests, production build, and the PDF upload smoke test after the integration audit.
-- [Not started] Deploy the application and test the deployed version.
-- [Complete] Update README setup, API contract, implemented capabilities, and limitations (`README.md`).
-- [Complete] Reconcile architecture and task checklist with the current implementation.
-- [Not started] Prepare a demonstration using a realistic student scenario.
+### Testing
+- [Partial] Test different PDF documents — upload smoke tests cover one readable sample plus invalid, oversized, textless, and corrupted files; varied study materials are not covered.
+- [Partial] Test relevant and irrelevant questions — retrieval unit tests cover keyword matches and no-match cases; chat scenarios are not tested.
+- [Not started] Check whether answers are supported by retrieved content — the API returns excerpts and does not generate or verify answers.
+- [Partial] Test Socratic hints and follow-up questions — only the fixed Hint UI exists; no behavior tests or conversation-context tests found.
+- [Complete] Test adaptation after repeated difficulty — unit tests cover history-based repeated questions/attempts and resulting support instructions; end-to-end Gemini behavior remains untested.
+- [Not started] Fix bugs found during testing — no test-failure/fix record found.
 
-**Milestone: Partial** — integration fixes and route-level tests are in place;
-final validation, browser testing, and deployment remain.
+### Deployment and Demonstration
+- [Not started] Deploy the application — no deployment configuration or evidence of a deployed environment found.
+- [Not started] Test the deployed version — no deployed target or test evidence found.
+- [Partial] Update the README and setup instructions — README exists but still describes planned LLM, embedding, vector storage, adaptive tutoring, and deployment as project capabilities/plan; it does not clearly distinguish implemented functionality.
+- [Not started] Prepare a short demonstration using a realistic student scenario — no demo materials found.
+- [Not started] Document limitations and known issues — limitations such as keyword-only retrieval, no LLM, and no OCR are not documented in the README.
 
-## Remaining Limitations
+**Milestone: Not started** — no deployed MVP or demonstration evidence found.
 
-- No OCR for scanned PDFs.
-- No durable document, vector, or conversation storage.
-- Confusion cues are deterministic text patterns, not a diagnosis or assessment
-  of correctness.
-- Gemini output is constrained by retrieved passages in its prompt but is not
-  deterministically checked claim by claim.
-- No automated browser end-to-end suite or deployed environment.
+## Priority Order
+
+**P0 — Essential**
+- [Complete] PDF upload and text extraction.
+- [Partial] Retrieval-based question answering — keyword retrieval exists, but answer generation and semantic retrieval do not.
+- [Partial] Socratic guidance — only a fixed Hint message is present.
+- [Complete] Basic adaptive responses — confusion cues select mild, moderate, or high support instructions for the existing Gemini chat call.
+- [Partial] Reliable end-to-end workflow — upload works; the full tutoring workflow is incomplete and not integration-tested.
+
+**P1 — Important**
+- [Partial] Better detection of possible learning difficulty — deterministic text and conversation cues are covered by unit tests; paraphrase/sentiment detection is not attempted.
+- [Not started] Source references — retrieval results do not expose usable document/page citations in chat.
+- [Not started] Basic visual explanations.
+- [Partial] Improved error handling and interface polish — upload errors and responsive layout exist; broader chat/API behavior needs validation.
+
+**P2 — Optional**
+- [Not started] Advanced visual generation.
+- [Not started] Additional document formats.
+- [Not started] Learning analytics and progress dashboards.
+- [Not started] Voice or facial emotion recognition.
+
+P2 tasks should only be considered if the essential features are complete and tested.
 
 ## Definition of Done
 
-A feature is complete when it works in the application, handles common errors,
-has relevant automated coverage, and is integrated with the rest of the
-application. A task is not complete simply because its code has been written.
+A feature is complete when it works in the application, handles common errors, has been tested, and is integrated with the rest of the application. A task is not complete simply because its code has been written.

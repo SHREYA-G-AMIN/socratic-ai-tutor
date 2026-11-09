@@ -101,15 +101,6 @@ function isRepeatedQuestion(
   message: string,
   recentStudentMessages: readonly string[],
 ): boolean {
-  if (
-    !message.includes("?") &&
-    !/^\s*(?:what|why|how|when|where|which|who|whose|whom|can|could|would|will|do|does|did|is|are|was|were|explain|define|compare|describe)\b/i.test(
-      message,
-    )
-  ) {
-    return false;
-  }
-
   const normalizedMessage = normalizeQuestion(message);
   if (!normalizedMessage) {
     return false;
