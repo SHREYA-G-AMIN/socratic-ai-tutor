@@ -10,9 +10,53 @@ import {
   type EmbeddingBatch,
 } from "./embeddings";
 
-const MINIMUM_SEMANTIC_SIMILARITY = 0.35;
+// In a live check against the same sample PDF, a relevant query scored 0.747
+// and an unrelated query scored 0.548. The midpoint rejects that observed
+// false positive while retaining the relevant result; more corpus data may
+// warrant recalibrating this cutoff.
+const MINIMUM_SEMANTIC_SIMILARITY = 0.65;
+const MINIMUM_KEYWORD_COVERAGE = 0.5;
 const MAX_CACHED_DOCUMENTS = 2;
 const documentEmbeddingCache = new Map<string, Promise<number[][]>>();
+const NON_CONTENT_QUERY_WORDS = new Set([
+  "about",
+  "according",
+  "based",
+  "can",
+  "could",
+  "dont",
+  "describe",
+  "diagram",
+  "document",
+  "draw",
+  "explain",
+  "explanation",
+  "flowchart",
+  "give",
+  "help",
+  "how",
+  "into",
+  "list",
+  "make",
+  "please",
+  "process",
+  "show",
+  "summarise",
+  "summarize",
+  "summary",
+  "tell",
+  "that",
+  "this",
+  "understand",
+  "using",
+  "what",
+  "when",
+  "where",
+  "which",
+  "who",
+  "why",
+  "would",
+]);
 
 /**
  * A single chunk together with its relevance score for a query.
@@ -75,8 +119,35 @@ export function scoreChunk(chunk: string, keywords: string[]): number {
 }
 
 /**
+ * Rejects keyword-fallback passages whose exact matches cover less than half
+ * of the query's content terms. Generic request wording is excluded so a
+ * valid explicit request is not diluted by words such as "summarize" or
+ * "flowchart".
+ */
+export function hasSufficientKeywordCoverage(
+  chunk: string,
+  message: string,
+): boolean {
+  const contentKeywords = extractKeywords(message).filter(
+    (keyword) =>
+      !NON_CONTENT_QUERY_WORDS.has(
+        keyword.replace(/[^\p{L}\p{N}]/gu, ""),
+      ),
+  );
+  if (contentKeywords.length === 0) {
+    return false;
+  }
+
+  return (
+    scoreChunk(chunk, contentKeywords) / contentKeywords.length >=
+    MINIMUM_KEYWORD_COVERAGE
+  );
+}
+
+/**
  * Ranks document chunks by relevance to a user's question and returns the
- * top-scoring passages that actually contain matching keywords.
+ * top-scoring passages whose keyword matches cover at least half the query's
+ * content terms.
  *
  * Chunks are sorted by score descending, with earlier document positions
  * breaking ties. Only chunks with at least one keyword match are returned.
@@ -108,7 +179,11 @@ export function retrieveRelevantChunks(
       end: chunk.end,
       pageNumbers: getPageNumbers(chunk, pageRanges),
     }))
-    .filter((result) => result.score > 0)
+    .filter(
+      (result) =>
+        result.score > 0 &&
+        hasSufficientKeywordCoverage(result.chunk, message),
+    )
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, maxResults);
 }

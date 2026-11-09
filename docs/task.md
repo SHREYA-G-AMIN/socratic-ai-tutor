@@ -11,10 +11,11 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 - [Complete] Validate PDF uploads, file size, PDF signature, and single-file requests.
 - [Complete] Extract readable PDF text and page character ranges; reject empty, textless, and malformed PDFs.
 - [Complete] Split extracted text into overlapping chunks and map citations to pages where available.
-- [Complete] Retrieve semantically relevant chunks using Gemini embeddings.
-- [Complete] Fall back to keyword retrieval if semantic embeddings fail and return a warning.
+- [Complete] Retrieve semantically relevant chunks using Gemini embeddings; reject cosine scores below 0.65, calibrated between observed relevant (0.747) and unrelated (0.548) scores on the same sample PDF.
+- [Complete] Fall back to keyword retrieval if semantic embeddings fail, require matches for at least half the query's content terms, and return a warning.
 - [Partial] Persist document vectors — a bounded in-process cache is used; there is no durable vector store.
 - [Complete] Return a no-evidence response without invoking Gemini when retrieval finds no sources.
+- [Complete] Regression-test unrelated and borderline semantic matches; rejected passages produce no citations and skip Gemini.
 - [Partial] Support scanned PDFs — OCR is not implemented.
 
 ## Milestone 2 — Gemini Socratic Tutoring and Adaptation
@@ -24,6 +25,7 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 - [Complete] Preserve Socratic guidance for ordinary learning questions.
 - [Complete] Detect confusion evidence from phrase cues, repeated normalized questions, unsuccessful-attempt language, and frustration statements in recent student turns.
 - [Complete] Adapt the existing Gemini instructions for none/mild/moderate/high support levels.
+- [Complete] Explicitly forbid filling missing explanatory facts, examples, or prerequisites from general knowledge; tell the tutor to disclose when prerequisites are absent from retrieved material.
 - [Complete] Keep source citations attached to all grounded tutor responses.
 - [Partial] Validate every generated prose claim against source text — Gemini is instructed to stay grounded, but there is no deterministic fact-checker.
 - [Partial] Confusion detection — rule-based text matching only; no paraphrase or sentiment model, and no emotion diagnosis.

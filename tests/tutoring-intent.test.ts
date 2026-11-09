@@ -60,19 +60,32 @@ test("adaptive direct-answer instructions preserve an explicit summary request",
   const instructions = getTutorInstructions("summary", "moderate");
 
   assert.match(instructions, /structured summary/i);
-  assert.match(instructions, /break the concept into smaller ordered steps/i);
+  assert.match(instructions, /break supported material into smaller ordered steps/i);
   assert.match(instructions, /keep the requested format/i);
   assert.match(instructions, /only.*retrieved document passages/i);
+  assert.match(instructions, /do not add course-specific facts/i);
+  assert.match(instructions, /uploaded material does not provide it/i);
   assert.match(instructions, /do not ask a follow-up question/i);
 });
 
 test("adaptive instructions support the requested explanation without Socratic redirection", () => {
   const instructions = getTutorInstructions("direct", "high");
 
-  assert.match(instructions, /explain prerequisite concepts first/i);
+  assert.match(instructions, /explain prerequisites only when the retrieved passages support them/i);
   assert.match(instructions, /supportive tone/i);
+  assert.match(instructions, /if a prerequisite is missing/i);
+  assert.match(instructions, /rather than supplying a likely-sounding explanation/i);
   assert.match(instructions, /do not turn the response into a hint or Socratic question/i);
   assert.match(instructions, /keep the requested format/i);
+});
+
+test("moderate adaptive instructions do not invent unsupported examples or steps", () => {
+  const instructions = getTutorInstructions("socratic", "moderate");
+
+  assert.match(instructions, /break supported material into smaller ordered steps/i);
+  assert.match(instructions, /only when the retrieved passages support every factual detail/i);
+  assert.match(instructions, /explicitly state when the passages do not contain/i);
+  assert.match(instructions, /do not infer missing steps, prerequisites, examples, or facts/i);
 });
 
 test("adaptive direct formats remain direct for explanations, definitions, comparisons, and lists", () => {

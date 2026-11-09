@@ -43,7 +43,7 @@ Socratic AI Tutor aims to provide a more personalized learning experience throug
 | Styling | Tailwind CSS 4 and theme tokens | Responsive light/dark styling |
 | Tutor and embeddings | Gemini `gemini-3.5-flash-lite`, `gemini-embedding-001` | One chat generation call and semantic retrieval |
 | PDF processing | `unpdf` | Server-side text and page-range extraction |
-| Retrieval | Cosine similarity with in-memory embedding cache; keyword fallback | Select relevant passages and citations |
+| Retrieval | Cosine similarity (0.65 minimum), in-memory embedding cache; keyword fallback (at least half of content terms must match) | Select relevant passages and citations |
 | Diagrams | Mermaid 12 | Render optional, passage-grounded diagrams |
 
 No database or durable conversation store is currently configured. The Gemini
@@ -53,7 +53,7 @@ model can be overridden with `GEMINI_EMBEDDING_MODEL`.
 ## System Workflow
 
 1. The upload route validates a PDF, extracts readable text and page ranges, and returns them to the browser. Scanned PDFs without a text layer are rejected.
-2. The chat route chunks the extracted text and retrieves relevant passages using Gemini embeddings; on embedding failure, it falls back to keyword matching.
+2. The chat route chunks the extracted text and retrieves relevant passages using Gemini embeddings (cosine score at least 0.65); on embedding failure, it falls back to keyword matches covering at least half the query's content terms.
 3. If no passages are found, the route returns a fixed no-evidence response without calling Gemini.
 4. Otherwise, it sends retrieved passages, intent/adaptation instructions, and the existing conversation history to Gemini once.
 5. The response includes tutor text, citations, retrieval mode, optional warning, and an optional Mermaid diagram.
@@ -109,6 +109,7 @@ socratic-ai-tutor/
 
 - Confusion detection uses phrase patterns and exact normalized question repeats; paraphrase/sentiment recognition is not implemented.
 - Gemini grounding and diagram correctness are instructed and no-evidence outputs are suppressed, but supported prose is not deterministically fact-checked.
+- Retrieval cutoffs were checked against a sample PDF and can reject useful passages or accept borderline ones on other documents or model versions.
 - Embedding cache is in-process and bounded; it is not durable across restarts or instances.
 - No OCR, database, persisted chat history, or deployment configuration is included.
 - Automated route tests mock Gemini and embeddings; they do not measure live-model answer quality.

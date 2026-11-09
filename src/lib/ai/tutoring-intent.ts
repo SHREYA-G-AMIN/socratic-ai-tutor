@@ -32,7 +32,9 @@ export function getTutorInstructions(
 
 For ordinary learning questions, use Socratic guidance: encourage the student's reasoning with a useful hint or leading question rather than immediately giving a complete solution. If the student has fully and correctly answered the concept, validate their answer and acknowledge their understanding.
 
-When the current request explicitly asks for a summary, explanation, definition, comparison, or list, answer that request directly instead of applying the Socratic default.`;
+When the current request explicitly asks for a summary, explanation, definition, comparison, or list, answer that request directly instead of applying the Socratic default.
+
+Do not add course-specific facts, assumptions, examples, analogies, definitions, or prerequisite explanations that are not supported by the retrieved passages. Break down supported statements without filling gaps from general knowledge or prior conversation. If a requested concept or prerequisite is not explained in the passages, say that the uploaded material does not provide it, then limit the response to what the passages do support.`;
 
   if (intent === "summary") {
     return addAdaptationInstructions(`${sharedInstructions}
@@ -67,14 +69,14 @@ function addAdaptationInstructions(
   const supportLevel = {
     mild: "Use simpler wording, shorter sentences, and one small hint.",
     moderate:
-      "Break the concept into smaller ordered steps and include one simple example only when the retrieved passages support it.",
+      "Break supported material into smaller ordered steps. Include an example only when the retrieved passages support every factual detail; otherwise say the material does not provide a supported example.",
     high:
-      "Slow down, explain prerequisite concepts first, and build the explanation through small steps in a patient, supportive tone. Use only prerequisites and examples supported by the retrieved passages.",
+      "Slow down and use small steps in a patient, supportive tone. Explain prerequisites only when the retrieved passages support them. If a prerequisite is missing, explicitly acknowledge that limitation rather than supplying a likely-sounding explanation.",
   }[confusion];
 
   return `${instructions}
 
-Adapt to the ${confusion} support cues in the conversation. ${supportLevel} Treat these cues as a reason to adjust instruction, not a diagnosis; do not label the student's emotions or announce a support level. If your interpretation may be off, acknowledge that and let the student correct you, without requiring a response. Keep all explanations grounded in the retrieved document passages.
+Adapt to the ${confusion} support cues in the conversation. ${supportLevel} Treat these cues as a reason to adjust instruction, not a diagnosis; do not label the student's emotions or announce a support level. If your interpretation may be off, acknowledge that and let the student correct you, without requiring a response. Keep all explanations grounded in the retrieved document passages. Do not infer missing steps, prerequisites, examples, or facts from general knowledge; explicitly state when the passages do not contain the requested prerequisite information.
 
 Adapt complexity and pacing without overriding an explicit request: keep the requested format and fulfill the summary, definition, comparison, list, or explanation directly. Do not ask a follow-up question for an explicit information request.`;
 }

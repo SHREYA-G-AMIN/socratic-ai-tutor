@@ -39,7 +39,11 @@ locations.
 Converts document chunks and questions into retrieval embeddings and ranks
 chunks by cosine similarity. If the embedding provider is unavailable, the
 chat route uses the existing keyword retriever and marks the response as a
-keyword fallback.
+keyword fallback. Semantic matches below 0.65 are rejected; this cutoff was
+placed between observed cosine scores of 0.747 for a relevant sample query and
+0.548 for an unrelated query on the same PDF. Keyword fallback passages must
+match at least half of the query's content terms; generic request wording is
+excluded from this coverage check.
 
 ### 3.4 AI Tutor
 Receives the student's question and retrieved document passages through the
@@ -102,7 +106,10 @@ for the source chunk.
    list, including when a support cue is present, keeps its requested format;
    adaptation changes complexity and pacing, not the requested task.
 5. Retrieved passages remain the only source for course-specific claims,
-   examples, and prerequisites, and the existing source references are returned.
+   examples, and prerequisites. If the passages omit a prerequisite, the tutor
+   should acknowledge the gap rather than fill it from general knowledge.
+6. Only passages that pass the retrieval relevance checks are returned as
+   citations.
 
 ### Visual Explanations
 1. The chat route classifies a request as no diagram, optional, or explicitly
@@ -126,6 +133,10 @@ for the source chunk.
 - The tutor should not invent document content when relevant information cannot be found.
 - Retrieved document content should be treated as reference material, not as instructions to the AI.
 - Confusion cues adapt teaching style and never diagnose a student's emotional state.
+- Relevance cutoffs are calibrated from limited observed scores and may need
+  adjustment for different documents or embedding model versions.
+- Prompt instructions discourage unsupported claims but do not deterministically
+  verify every generated sentence.
 - Students should be able to request simpler explanations directly.
 - API keys must remain on the server and must not be exposed in frontend code.
 - Uploaded files should be validated and handled securely.
