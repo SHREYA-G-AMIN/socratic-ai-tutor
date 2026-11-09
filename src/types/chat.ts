@@ -10,6 +10,7 @@ export interface ChatSourceReference {
 
 export interface ChatResponse {
   reply: string;
+  diagram?: string;
   sources: ChatSourceReference[];
   retrievalMode: "semantic" | "keyword";
   warning?: string;

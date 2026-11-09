@@ -4,6 +4,10 @@ import {
   getTutorInstructions,
 } from "@/lib/ai/tutoring-intent";
 import { detectConfusion } from "@/lib/ai/confusion-detection";
+import {
+  getDiagramRequest,
+  parseTutorResponse,
+} from "@/lib/ai/visual-explanations";
 import { EmbeddingProviderError } from "@/lib/documents/embeddings";
 import { chunkText } from "@/lib/documents/chunker";
 import {
@@ -145,14 +149,16 @@ export async function POST(request: Request) {
         text: turn.parts.map((part) => part.text).join(""),
       })),
     );
-    const reply = await generateTutorReply(
+    const diagramRequest = getDiagramRequest(message.trim(), sources.length > 0);
+    const generatedResponse = await generateTutorReply(
       apiKey,
       contents,
-      getTutorInstructions(intent, confusion.severity),
+      getTutorInstructions(intent, confusion.severity, diagramRequest, sources.length > 0),
     );
+    const tutorResponse = parseTutorResponse(generatedResponse);
 
     return NextResponse.json({
-      reply,
+      ...tutorResponse,
       sources,
       retrievalMode,
       ...(warning ? { warning } : {}),
@@ -192,14 +198,17 @@ function parseChatHistory(value: unknown): GeminiHistoryMessage[] {
       const role: GeminiHistoryMessage["role"] =
         message.role === "student" ? "user" : "model";
 
+      const diagram =
+        typeof message.diagram === "string"
+          ? `\n\nPrevious visual explanation (Mermaid):\n${message.diagram.slice(0, 8_000)}`
+          : "";
+
       return {
         role,
         parts: [
           {
             text:
-              typeof message.text === "string"
-                ? message.text.slice(0, MAX_MESSAGE_LENGTH)
-                : "",
+              `${typeof message.text === "string" ? message.text.slice(0, MAX_MESSAGE_LENGTH) : ""}${diagram}`,
           },
         ],
       };
