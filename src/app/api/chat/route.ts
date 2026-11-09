@@ -128,7 +128,16 @@ export async function POST(request: Request) {
             })
             .join("\n\n")
         : "No direct relevant passages found in the document.";
-    const prompt = `Context Passages:\n${contextText}\n\nUser Question: ${message.trim()}`;
+    
+    // Add the hallucination safeguard and Socratic instruction back into the prompt
+    const prompt = `You are a Socratic academic tutor. Your goal is to guide the student to the correct answer rather than giving it to them directly. 
+    
+    1. If the information to answer the question is NOT in the Context Passages, you MUST politely refuse to answer and state that the information is outside the scope of the document. Do not invent answers.
+    2. If the user asks a valid question based on the document, provide a thoughtful hint or ask a leading question. Do not give the direct answer away.
+    3. If the user correctly answers the concept, validate their understanding and ask if they have new questions.
+    
+    Context Passages:\n${contextText}\n\nUser Question: ${message.trim()}`;
+    
     const history = parseChatHistory(body.history);
     const contents = [...history, { role: "user" as const, parts: [{ text: prompt }] }];
     while (contents.length > 1 && contents[0].role === "model") {
