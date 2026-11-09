@@ -54,16 +54,62 @@ export default function Home() {
     setChatError(null);
   };
 
-  const handleHintClick = () => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "hint",
-        text:
-          "Hint: Think about how a tree structure splits data into smaller halves!",
-      },
-    ]);
+  const handleHintClick = async () => {
+    if (!uploadedDocument) {
+      setChatError("Please upload a document before requesting a hint.");
+      return;
+    }
+
+    const hintRequestMsg: Message = { 
+      role: "student", 
+      text: "Can you give me a small hint to help me figure this out on my own?" 
+    };
+    
+    setMessages((prev) => [...prev, hintRequestMsg]);
+    setIsLoading(true);
     setChatError(null);
+
+    try {
+      const response: Response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: hintRequestMsg.text,
+          documentText: uploadedDocument.text,
+          fileName: uploadedDocument.fileName,
+          pageRanges: uploadedDocument.pageRanges,
+          history: messages,
+        } satisfies ChatRequest),
+      });
+
+      const body = await response.json();
+
+      if (!response.ok) {
+        const errorBody = body as { error?: string };
+        throw new Error(errorBody.error || "Failed to get hint");
+      }
+
+      const chatBody = body as ChatResponse;
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "hint",
+          text: chatBody.reply,
+          sources: chatBody.sources,
+          warning: chatBody.warning,
+        },
+      ]);
+    } catch (error) {
+      setChatError(
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred. Please try again.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSendClick = async () => {
