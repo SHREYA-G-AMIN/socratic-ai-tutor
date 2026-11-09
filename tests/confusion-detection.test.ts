@@ -41,6 +41,15 @@ test("repeated normalized questions in conversation are classified as moderate",
   assert.ok(assessment.signals.includes("repeated-question"));
 });
 
+test("repeated non-question messages do not trigger confusion detection", () => {
+  assert.deepEqual(
+    detectConfusion("Thanks, that helped.", [
+      { role: "student", text: "Thanks, that helped." },
+    ]),
+    { severity: "none", signals: [] },
+  );
+});
+
 test("repeated unsuccessful attempts and frustration support high severity", () => {
   const assessment = detectConfusion("I'm still getting it wrong and this is frustrating.", [
     { role: "student", text: "I tried that, but it didn't work." },

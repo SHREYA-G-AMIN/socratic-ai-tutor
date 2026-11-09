@@ -33,7 +33,13 @@ const GEMINI_REQUEST_TIMEOUT_MS = 60_000;
 
 export async function POST(request: Request) {
   try {
-    const body: unknown = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
     if (!isRecord(body)) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
