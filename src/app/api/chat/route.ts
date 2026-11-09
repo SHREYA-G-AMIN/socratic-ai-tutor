@@ -3,6 +3,7 @@ import {
   detectTutoringIntent,
   getTutorInstructions,
 } from "@/lib/ai/tutoring-intent";
+import { detectConfusion } from "@/lib/ai/confusion-detection";
 import { EmbeddingProviderError } from "@/lib/documents/embeddings";
 import { chunkText } from "@/lib/documents/chunker";
 import {
@@ -137,10 +138,17 @@ export async function POST(request: Request) {
     }
 
     const intent = detectTutoringIntent(message.trim());
+    const confusion = detectConfusion(
+      message.trim(),
+      history.map((turn) => ({
+        role: turn.role === "user" ? "student" : "tutor",
+        text: turn.parts.map((part) => part.text).join(""),
+      })),
+    );
     const reply = await generateTutorReply(
       apiKey,
       contents,
-      getTutorInstructions(intent),
+      getTutorInstructions(intent, confusion.severity),
     );
 
     return NextResponse.json({

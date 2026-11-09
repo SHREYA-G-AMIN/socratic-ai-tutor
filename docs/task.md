@@ -57,24 +57,24 @@ This status reflects the repository audit on 2026-11-08, not earlier reports. Ev
 ## Week 3 — Socratic Tutoring and Adaptation
 
 ### Socratic Tutoring
-- [Not started] Design and test tutoring instructions — no system prompt or prompt tests found.
+- [Complete] Design and test tutoring instructions — intent-specific Gemini system instructions and unit tests cover direct and Socratic behavior (`src/lib/ai/tutoring-intent.ts`, `tests/tutoring-intent.test.ts`).
 - [Partial] Implement guiding questions and progressive hints — a Hint button adds one fixed, tree-specific message; there is no contextual Socratic guidance (`src/app/page.tsx`).
-- [Not started] Maintain relevant conversation context — displayed messages are not sent to the chat API.
+- [Complete] Maintain relevant conversation context — the chat API passes prior student/tutor turns to Gemini and uses recent student turns for support detection (`src/app/api/chat/route.ts`).
 - [Partial] Allow students to request additional help — the fixed Hint button exists, but it does not request or generate context-aware help.
 - [Not started] Avoid revealing complete solutions too early — no tutor or response policy is implemented.
 
 ### Adaptive Learning
-- [Not started] Research and select a practical text-based difficulty detection approach — no research or approach found.
-- [Not started] Identify explicit confusion signals and repeated requests for help — no detection logic found.
-- [Not started] Track repeated unsuccessful attempts where applicable — no attempt tracking found.
-- [Not started] Implement simpler explanations and smaller learning steps — no adaptation logic found.
-- [Not started] Test when the tutor should change its strategy — no adaptation tests found.
+- [Partial] Research and select a practical text-based difficulty detection approach — a deterministic, rule-based cue detector is implemented; no separate research comparison is documented (`src/lib/ai/confusion-detection.ts`).
+- [Complete] Identify explicit confusion signals and repeated requests for help — detects explicit confusion, simplification requests, and repeated normalized questions (`src/lib/ai/confusion-detection.ts`).
+- [Complete] Track repeated unsuccessful attempts where applicable — recent student turns are inspected for explicit unsuccessful-attempt cues; correctness is not inferred (`src/lib/ai/confusion-detection.ts`).
+- [Complete] Implement simpler explanations and smaller learning steps — none/mild/moderate/high support instructions adapt the existing Gemini call while preserving explicit request formats (`src/lib/ai/tutoring-intent.ts`, `src/app/api/chat/route.ts`).
+- [Complete] Test when the tutor should change its strategy — unit tests cover cue detection, severity, adaptive instructions, and explicit-intent compatibility (`tests/confusion-detection.test.ts`, `tests/tutoring-intent.test.ts`).
 
 ### Visual Support
 - [Not started] Choose a simple approach for diagrams or flowcharts — no implementation choice found.
 - [Not started] Add basic visual explanations for suitable topics — no explanatory diagrams or flowcharts found.
 
-**Milestone: Not started** — the current fixed Hint message does not meet the Socratic tutoring or adaptation milestone.
+**Milestone: Partial** — intent-aware tutoring and confusion-based explanation adaptation are implemented and unit-tested. Visual support and broader chat-flow testing remain outstanding.
 
 ## Week 4 — Integration, Testing, and Deployment
 
@@ -89,7 +89,7 @@ This status reflects the repository audit on 2026-11-08, not earlier reports. Ev
 - [Partial] Test relevant and irrelevant questions — retrieval unit tests cover keyword matches and no-match cases; chat scenarios are not tested.
 - [Not started] Check whether answers are supported by retrieved content — the API returns excerpts and does not generate or verify answers.
 - [Partial] Test Socratic hints and follow-up questions — only the fixed Hint UI exists; no behavior tests or conversation-context tests found.
-- [Not started] Test adaptation after repeated difficulty — no adaptation implementation or tests found.
+- [Complete] Test adaptation after repeated difficulty — unit tests cover history-based repeated questions/attempts and resulting support instructions; end-to-end Gemini behavior remains untested.
 - [Not started] Fix bugs found during testing — no test-failure/fix record found.
 
 ### Deployment and Demonstration
@@ -107,11 +107,11 @@ This status reflects the repository audit on 2026-11-08, not earlier reports. Ev
 - [Complete] PDF upload and text extraction.
 - [Partial] Retrieval-based question answering — keyword retrieval exists, but answer generation and semantic retrieval do not.
 - [Partial] Socratic guidance — only a fixed Hint message is present.
-- [Not started] Basic adaptive responses.
+- [Complete] Basic adaptive responses — confusion cues select mild, moderate, or high support instructions for the existing Gemini chat call.
 - [Partial] Reliable end-to-end workflow — upload works; the full tutoring workflow is incomplete and not integration-tested.
 
 **P1 — Important**
-- [Not started] Better detection of possible learning difficulty.
+- [Partial] Better detection of possible learning difficulty — deterministic text and conversation cues are covered by unit tests; paraphrase/sentiment detection is not attempted.
 - [Not started] Source references — retrieval results do not expose usable document/page citations in chat.
 - [Not started] Basic visual explanations.
 - [Partial] Improved error handling and interface polish — upload errors and responsive layout exist; broader chat/API behavior needs validation.
