@@ -170,9 +170,9 @@ test("keyword fallback keeps citations, explicit format, confusion adaptation, a
   });
 });
 
-test("irrelevant semantic retrieval suppresses generated diagrams and returns no citations", async () => {
+test("irrelevant semantic retrieval declines without generating unsupported text or diagrams", async () => {
   await withApiKey("test-key", async () => {
-    let geminiRequest: Record<string, unknown> | undefined;
+    let generationRequested = false;
     await withFetch(async (input, init) => {
       const url = String(input);
       if (url.includes("batchEmbedContents")) {
@@ -187,9 +187,9 @@ test("irrelevant semantic retrieval suppresses generated diagrams and returns no
         });
       }
 
-      geminiRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      generationRequested = true;
       return makeTutorResponse(
-        "No supported passage was found.\n```mermaid\nflowchart TD\n  Unsupported --> Claim\n```",
+        "Unsupported claim.\n```mermaid\nflowchart TD\n  Unsupported --> Claim\n```",
       );
     }, async () => {
       const response = await POST(
@@ -203,21 +203,9 @@ test("irrelevant semantic retrieval suppresses generated diagrams and returns no
       const body = await response.json();
       assert.equal(body.retrievalMode, "semantic");
       assert.deepEqual(body.sources, []);
+      assert.equal(body.reply, "I couldn't find supporting information for that question in the uploaded material.");
       assert.equal(body.diagram, undefined);
-      assert.equal(body.reply, "No supported passage was found.");
-
-      assert.ok(geminiRequest);
-      const request = geminiRequest as {
-        systemInstruction: { parts: Array<{ text: string }> };
-      };
-      assert.match(
-        request.systemInstruction.parts[0].text,
-        /do not include a Mermaid block/i,
-      );
-      assert.match(
-        request.systemInstruction.parts[0].text,
-        /do not support a reliable visual explanation/i,
-      );
+      assert.equal(generationRequested, false);
     });
   });
 });

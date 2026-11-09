@@ -1,10 +1,10 @@
 # Socratic AI Tutor
 
-**An Emotion-Aware, Syllabus-Bounded AI Tutor**
+**A document-grounded AI tutor with Socratic guidance**
 
 ## Overview
 
-Socratic AI Tutor is an AI-powered educational web application that helps students understand concepts and solve problems independently. It uses uploaded study materials to provide syllabus-relevant answers, guides students through Socratic questioning, and adapts explanations based on potential signs of confusion or frustration.
+Socratic AI Tutor uses uploaded PDF study materials to provide grounded explanations, Socratic guidance, and optional visual diagrams. It uses Gemini for retrieval embeddings and tutor responses, with a keyword fallback when semantic retrieval is unavailable.
 
 ## Problem Statement
 
@@ -14,129 +14,101 @@ Socratic AI Tutor aims to provide a more personalized learning experience throug
 
 ## Key Features
 
-### 1. Syllabus-Bounded AI Tutoring
-- Upload textbooks, lecture notes, and syllabus documents in PDF format.
-- Ask questions based on uploaded study materials.
-- Retrieve relevant content to ground AI-generated responses.
-- Redirect questions when sufficient supporting material is unavailable.
+### 1. Document-Grounded Tutoring
+- Upload readable PDFs (up to 10 MB and 500 pages).
+- Retrieve semantically relevant passages, with a keyword fallback if embeddings fail.
+- Return passage citations with filename and page numbers when available, otherwise text offsets.
+- Decline to answer when retrieval finds no supporting passages.
 
-### 2. Socratic Learning
-- Guide students through questions and progressive hints.
-- Encourage independent reasoning instead of immediately revealing answers.
-- Break complex problems into smaller, manageable steps.
+### 2. Socratic and Direct Answers
+- Use hints and leading questions for ordinary learning questions.
+- Answer explicit summary, explanation, definition, comparison, and list requests directly.
+- Adapt wording and step-by-step detail to text-based confusion cues in recent student turns.
 
-### 3. Emotion-Aware Adaptive Learning
-- Identify potential confusion or frustration through text-based interaction cues.
-- Consider repeated unsuccessful attempts and requests for help.
-- Adapt explanations by simplifying concepts, changing the guidance strategy, or providing additional hints.
+### 3. Adaptive Guidance
+- Detect explicit confusion, simplification requests, repeated questions, unsuccessful-attempt language, and frustration statements.
+- Adjust instructions for mild, moderate, and high support levels.
+- These deterministic cues guide teaching only; the app does not diagnose a student's emotional state.
 
 ### 4. Visual Explanations
-- Provide relevant diagrams and flowcharts when useful.
-- Present complex concepts through simpler, structured explanations.
+- Include Mermaid diagrams for explicit requests and selectively for process/sequence questions.
+- Ground diagram instructions in retrieved passages and render with strict Mermaid security settings.
+- Fall back to visible Mermaid source when rendering fails.
 
-Emotion detection will be treated as an estimate rather than a definitive judgment of a student's emotional state.
-
-## Proposed Technology Stack
+## Current Technology
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| Frontend | Next.js, React | Build the web application |
-| Language | TypeScript | Type-safe application development |
-| Styling | Tailwind CSS | Responsive user interface |
-| Backend | Next.js Route Handlers | API endpoints and application logic |
-| LLM | LLM API | Generate explanations and Socratic questions |
-| AI Retrieval | Retrieval-Augmented Generation (RAG) | Ground responses in uploaded materials |
-| PDF Processing | Compatible PDF parsing library | Extract text from documents |
-| Embeddings | Embedding model | Enable semantic document retrieval |
-| Vector Storage | PostgreSQL with pgvector or a managed vector store | Store and retrieve document embeddings |
-| Database | PostgreSQL | Store document metadata and learning sessions |
-| ORM | Drizzle ORM or Prisma | Database access and management |
-| Validation | Zod | Validate inputs and API data |
-| Version Control | Git and GitHub | Track and manage code |
-| Deployment | Vercel or equivalent | Deploy the web application |
+| Frontend | Next.js 16, React 19, TypeScript | Web app and chat UI |
+| Styling | Tailwind CSS 4 and theme tokens | Responsive light/dark styling |
+| Tutor and embeddings | Gemini `gemini-3.5-flash-lite`, `gemini-embedding-001` | One chat generation call and semantic retrieval |
+| PDF processing | `unpdf` | Server-side text and page-range extraction |
+| Retrieval | Cosine similarity with in-memory embedding cache; keyword fallback | Select relevant passages and citations |
+| Diagrams | Mermaid 12 | Render optional, passage-grounded diagrams |
 
-The final selection of AI models, libraries, and storage services will be made during the initial research phase.
+No database or durable conversation store is currently configured. The Gemini
+API key is server-only and must be provided as `GEMINI_API_KEY`. The embedding
+model can be overridden with `GEMINI_EMBEDDING_MODEL`.
 
 ## System Workflow
 
-1. The student uploads a PDF containing study materials.
-2. The application extracts the text and divides it into smaller chunks.
-3. The system generates embeddings and indexes the document content for retrieval.
-4. The student asks a question through the chat interface.
-5. Relevant content is retrieved and supplied to the AI model as context.
-6. The tutor generates a syllabus-grounded response using questions, hints, and explanations.
-7. Interaction cues and repeated unsuccessful attempts help determine whether additional support may be needed.
-8. The tutor adapts its guidance and provides visual explanations when appropriate.
+1. The upload route validates a PDF, extracts readable text and page ranges, and returns them to the browser. Scanned PDFs without a text layer are rejected.
+2. The chat route chunks the extracted text and retrieves relevant passages using Gemini embeddings; on embedding failure, it falls back to keyword matching.
+3. If no passages are found, the route returns a fixed no-evidence response without calling Gemini.
+4. Otherwise, it sends retrieved passages, intent/adaptation instructions, and the existing conversation history to Gemini once.
+5. The response includes tutor text, citations, retrieval mode, optional warning, and an optional Mermaid diagram.
+6. The browser renders diagrams using current theme colors; malformed or oversized diagrams are shown as text.
 
-## Proposed Project Structure
+## Development
+
+```powershell
+npm install
+npm run dev
+```
+
+Set `GEMINI_API_KEY` in the local server environment before using chat or
+semantic retrieval. Do not expose it through a `NEXT_PUBLIC_` variable.
+
+```powershell
+npx tsc --noEmit
+npm run lint
+npm test
+npm run build
+```
+
+## Project Structure
 
 ```text
 socratic-ai-tutor/
 ├── docs/
-│   ├── user-requirements.md
 │   ├── architecture.md
-│   └── emotion-detection-research.md
+│   ├── design.md
+│   ├── prd.md
+│   ├── rules.md
+│   ├── task.md
+│   └── user-requirements.md
 ├── public/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx
-│   │   ├── chat/
-│   │   └── api/
+│   │   ├── api/
+│   │   │   ├── chat/route.ts
+│   │   │   └── documents/upload/route.ts
+│   │   ├── layout.tsx
+│   │   └── page.tsx
 │   ├── components/
-│   ├── lib/
-│   │   ├── ai/
-│   │   ├── retrieval/
-│   │   ├── documents/
-│   │   └── adaptation/
-│   └── types/
+│   └── lib/
+│       ├── ai/
+│       └── documents/
 ├── tests/
-├── .env.example
 ├── .gitignore
 ├── package.json
 └── README.md
 ```
 
-The structure may be adjusted as implementation progresses.
+## Current Limitations
 
-## One-Month Development Plan
-
-### Week 1: Research and Setup
-- Finalize project requirements and MVP scope.
-- Research text-based emotion detection and adaptive tutoring approaches.
-- Evaluate suitable LLMs, embedding models, and document-processing libraries.
-- Finalize the system architecture and technology stack.
-- Set up the Next.js project, GitHub repository, and basic user interface.
-
-**Milestone:** Working project setup with a finalized architecture.
-
-### Week 2: Document Processing and AI Chat
-- Implement PDF upload and text extraction.
-- Split documents into chunks and generate embeddings.
-- Implement semantic retrieval for relevant study material.
-- Integrate the LLM API with retrieved context.
-- Build the chat interface and handle unsupported questions.
-
-**Milestone:** Students can upload study materials and ask questions grounded in their documents.
-
-### Week 3: Socratic Tutoring and Adaptation
-- Implement guided questions and progressive hints.
-- Maintain relevant conversation context.
-- Develop basic text-based confusion and frustration cues.
-- Adapt explanations based on interaction patterns.
-- Implement basic diagram or flowchart generation.
-
-**Milestone:** An interactive tutor that guides students and adapts its explanations.
-
-### Week 4: Integration, Testing, and Deployment
-- Integrate all features into a complete application.
-- Test different documents, questions, and tutoring scenarios.
-- Verify response relevance and source grounding.
-- Test adaptive guidance and visual explanations.
-- Fix bugs and refine the user interface.
-- Deploy the application and prepare a working demonstration.
-
-**Milestone:** A deployed MVP demonstrating syllabus-grounded tutoring, Socratic guidance, and adaptive learning.
-
-## Expected Outcome
-
-A functional AI tutoring web application that helps students learn from their own study materials, encourages independent problem-solving, and adapts its guidance when they appear to struggle.
+- Confusion detection uses phrase patterns and exact normalized question repeats; paraphrase/sentiment recognition is not implemented.
+- Gemini grounding and diagram correctness are instructed and no-evidence outputs are suppressed, but supported prose is not deterministically fact-checked.
+- Embedding cache is in-process and bounded; it is not durable across restarts or instances.
+- No OCR, database, persisted chat history, or deployment configuration is included.
+- Automated route tests mock Gemini and embeddings; they do not measure live-model answer quality.

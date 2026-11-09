@@ -131,6 +131,16 @@ export async function POST(request: Request) {
       score: result.score,
     }));
 
+    if (sources.length === 0) {
+      return NextResponse.json({
+        reply:
+          "I couldn't find supporting information for that question in the uploaded material.",
+        sources,
+        retrievalMode,
+        ...(warning ? { warning } : {}),
+      } satisfies ChatResponse);
+    }
+
     const contextText =
       sources.length > 0
         ? sources
