@@ -75,10 +75,34 @@ test("adaptive instructions support the requested explanation without Socratic r
   assert.match(instructions, /keep the requested format/i);
 });
 
+test("adaptive direct formats remain direct for explanations, definitions, comparisons, and lists", () => {
+  for (const request of [
+    "Explain this process",
+    "Define this term",
+    "Compare these methods",
+    "List the main stages",
+  ]) {
+    assert.equal(detectTutoringIntent(request), "direct");
+  }
+
+  const instructions = getTutorInstructions("direct", "moderate");
+  assert.match(instructions, /fulfill the requested explanation, definition, comparison, or list/i);
+  assert.match(instructions, /keep the requested format/i);
+  assert.match(instructions, /do not ask a follow-up question/i);
+});
+
 test("mild confusion adapts Socratic guidance with simpler wording and a small hint", () => {
   const instructions = getTutorInstructions("socratic", "mild");
 
   assert.match(instructions, /simpler wording/i);
   assert.match(instructions, /small hint/i);
-  assert.match(instructions, /do not diagnose/i);
+  assert.match(instructions, /not a diagnosis/i);
+  assert.match(instructions, /let the student correct you/i);
+});
+
+test("no confusion preserves normal Socratic guidance without adaptation cues", () => {
+  const instructions = getTutorInstructions("socratic", "none");
+
+  assert.match(instructions, /use Socratic guidance/i);
+  assert.doesNotMatch(instructions, /support cues in the conversation/i);
 });

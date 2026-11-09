@@ -61,7 +61,7 @@ function addAdaptationInstructions(
 
   return `${instructions}
 
-The conversation contains ${confusion} support cues. ${supportLevel} These cues guide the teaching approach; do not diagnose or claim to know the student's emotional state. You may briefly say that you can try another approach if needed, without requiring a response. Keep all explanations grounded in the retrieved document passages.
+Adapt to the ${confusion} support cues in the conversation. ${supportLevel} Treat these cues as a reason to adjust instruction, not a diagnosis; do not label the student's emotions or announce a support level. If your interpretation may be off, acknowledge that and let the student correct you, without requiring a response. Keep all explanations grounded in the retrieved document passages.
 
 Adapt complexity and pacing without overriding an explicit request: keep the requested format and fulfill the summary, definition, comparison, list, or explanation directly. Do not ask a follow-up question for an explicit information request.`;
 }

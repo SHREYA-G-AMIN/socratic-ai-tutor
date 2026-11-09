@@ -9,7 +9,7 @@
 - **Partial** — some implementation exists, but requirements or verification are missing.
 - **Not started** — no implementation or evidence of completed research was found.
 
-This status reflects the repository audit on 2026-11-08, not earlier reports. Evidence inspected includes the application source, documentation, tests, and scripts. `npm test` passed (32 tests); the PDF upload smoke test passed (11 checks). No automated tests were found for chat API behavior, LLM responses, tutoring/adaptation, visuals, or deployment.
+The initial status reflects the repository audit on 2026-11-08. The Week 3 tutoring/adaptation and related test statuses were updated on 2026-11-09 after implementation; other historical status entries have not been re-audited.
 
 ## Week 1 — Research and Project Setup
 

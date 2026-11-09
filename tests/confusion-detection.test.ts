@@ -24,6 +24,13 @@ test("explicit confusion is classified as moderate", () => {
   assert.ok(assessment.signals.includes("explicit-confusion"));
 });
 
+test("frustration is treated as a support cue without diagnosing emotion", () => {
+  const assessment = detectConfusion("I'm frustrated by this explanation.");
+
+  assert.equal(assessment.severity, "moderate");
+  assert.ok(assessment.signals.includes("explicit-frustration"));
+});
+
 test("repeated normalized questions in conversation are classified as moderate", () => {
   const assessment = detectConfusion("Why does this reaction happen?", [
     { role: "student", text: "Why does this reaction happen" },
