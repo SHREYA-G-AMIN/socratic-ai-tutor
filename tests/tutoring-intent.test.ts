@@ -55,3 +55,30 @@ test("ordinary learning questions preserve Socratic guidance", () => {
     /structured summary|short overview followed by key points/i,
   );
 });
+
+test("adaptive direct-answer instructions preserve an explicit summary request", () => {
+  const instructions = getTutorInstructions("summary", "moderate");
+
+  assert.match(instructions, /structured summary/i);
+  assert.match(instructions, /break the concept into smaller steps/i);
+  assert.match(instructions, /keep the requested format/i);
+  assert.match(instructions, /only.*retrieved document passages/i);
+  assert.match(instructions, /do not ask a follow-up question/i);
+});
+
+test("adaptive instructions support the requested explanation without Socratic redirection", () => {
+  const instructions = getTutorInstructions("direct", "high");
+
+  assert.match(instructions, /explain prerequisites/i);
+  assert.match(instructions, /supportive tone/i);
+  assert.match(instructions, /do not turn the response into a hint or Socratic question/i);
+  assert.match(instructions, /keep the requested format/i);
+});
+
+test("mild confusion adapts Socratic guidance with simpler wording and a small hint", () => {
+  const instructions = getTutorInstructions("socratic", "mild");
+
+  assert.match(instructions, /simpler wording/i);
+  assert.match(instructions, /small hint/i);
+  assert.match(instructions, /do not diagnose/i);
+});
