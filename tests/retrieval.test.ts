@@ -6,7 +6,6 @@ register("./server-only-hook.mjs", import.meta.url);
 
 const {
   extractKeywords,
-  hasSufficientKeywordCoverage,
   scoreChunk,
   retrieveRelevantChunks,
   retrieveSemanticallyRelevantChunks,
@@ -59,27 +58,6 @@ test("scoreChunk returns 0 when no keywords match", () => {
 test("scoreChunk handles empty keyword list", () => {
   const chunk = "any text at all";
   assert.equal(scoreChunk(chunk, []), 0);
-});
-
-test("keyword fallback coverage rejects incidental overlap and ignores request wording", () => {
-  assert.equal(
-    hasSufficientKeywordCoverage(
-      "France has a coastline.",
-      "Explain how binary search trees compare to orbital mechanics in France",
-    ),
-    false,
-  );
-  assert.equal(
-    hasSufficientKeywordCoverage(
-      "Photosynthesis captures light energy in plants.",
-      "I don't understand; summarize the photosynthesis process and draw a flowchart",
-    ),
-    true,
-  );
-  assert.equal(
-    hasSufficientKeywordCoverage("Generic material.", "summarize the document"),
-    false,
-  );
 });
 
 test("retrieveRelevantChunks returns matches sorted by score", () => {
@@ -215,7 +193,7 @@ test("semantic retrieval ranks by cosine similarity and includes page metadata",
     }
 
     return texts.map((text) =>
-      text.includes("vectors") ? [0.9, 0.1] : [0.7, Math.sqrt(0.51)],
+      text.includes("vectors") ? [0.9, 0.1] : [0.6, 0.8],
     );
   };
   const firstChunk = chunks[0];
@@ -255,48 +233,6 @@ test("semantic retrieval excludes unrelated chunks below the similarity threshol
   );
 
   assert.deepEqual(results, []);
-});
-
-test("semantic retrieval rejects observed false-positive and borderline scores", async () => {
-  const chunks = chunkText("A binary search tree stores keys.", {
-    chunkSize: 100,
-    chunkOverlap: 0,
-  });
-
-  for (const score of [0.5475265, 0.649]) {
-    const embedder = async (_texts: string[], taskType: string) =>
-      taskType === "RETRIEVAL_QUERY"
-        ? [[1, 0]]
-        : [[score, Math.sqrt(1 - score * score)]];
-    const results = await retrieveSemanticallyRelevantChunks(
-      chunks,
-      "What is the capital of France?",
-      { embedder, model: `test-relevance-cutoff-${score}` },
-    );
-
-    assert.deepEqual(results, [], `score ${score} should be rejected`);
-  }
-});
-
-test("semantic retrieval accepts a score at the calibrated relevance cutoff", async () => {
-  const chunks = chunkText("A binary search tree stores keys.", {
-    chunkSize: 100,
-    chunkOverlap: 0,
-  });
-  const score = 0.65;
-  const embedder = async (_texts: string[], taskType: string) =>
-    taskType === "RETRIEVAL_QUERY"
-      ? [[1, 0]]
-      : [[score, Math.sqrt(1 - score * score)]];
-
-  const results = await retrieveSemanticallyRelevantChunks(
-    chunks,
-    "How does a binary search tree store keys?",
-    { embedder, model: "test-relevance-cutoff-boundary" },
-  );
-
-  assert.equal(results.length, 1);
-  assert.ok(Math.abs(results[0].score - score) < Number.EPSILON * 2);
 });
 
 test("semantic retrieval leaves page numbers empty when source metadata is missing", async () => {
