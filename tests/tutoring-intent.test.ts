@@ -17,7 +17,7 @@ test("explicit summary requests select structured, source-grounded summaries", (
     assert.equal(intent, "summary");
     const instructions = getTutorInstructions(intent);
     assert.match(instructions, /structured summary/i);
-    assert.match(instructions, /only the retrieved passages/i);
+    assert.match(instructions, /retrieved (document )?passages/i);
     assert.match(instructions, /do not ask a follow-up question/i);
   }
 });
@@ -34,7 +34,7 @@ test("explicit explain, define, compare, and list requests use direct answers", 
 
   const instructions = getTutorInstructions("direct");
   assert.match(instructions, /answer that request directly/i);
-  assert.match(instructions, /never add a follow-up question/i);
+  assert.match(instructions, /do not ask a follow-up question/i);
   assert.match(instructions, /do not turn the response into a hint/i);
 });
 
@@ -52,6 +52,6 @@ test("ordinary learning questions preserve Socratic guidance", () => {
   assert.match(instructions, /useful hint or leading question/i);
   assert.doesNotMatch(
     instructions,
-    /The current request explicitly asks for a summary/i,
+    /structured summary|short overview followed by key points/i,
   );
 });

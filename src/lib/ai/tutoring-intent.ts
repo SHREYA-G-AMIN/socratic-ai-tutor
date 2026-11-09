@@ -21,7 +21,7 @@ export function getTutorInstructions(intent: TutoringIntent): string {
 
 For ordinary learning questions, use Socratic guidance: encourage the student's reasoning with a useful hint or leading question rather than immediately giving a complete solution. If the student has fully and correctly answered the concept, validate their answer and acknowledge their understanding.
 
-When the current request explicitly asks for a summary, explanation, definition, comparison, or list, answer that request directly instead of applying the Socratic default. Never add a follow-up question unless the student explicitly asks for one.`;
+When the current request explicitly asks for a summary, explanation, definition, comparison, or list, answer that request directly instead of applying the Socratic default.`;
 
   if (intent === "summary") {
     return `${sharedInstructions}
