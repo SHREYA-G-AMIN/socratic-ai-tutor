@@ -214,6 +214,37 @@ test("high-scoring unrelated semantic retrieval declines without Gemini or misle
   });
 });
 
+test("weak keyword fallback match declines without Gemini or citations", async () => {
+  await withApiKey("test-key", async () => {
+    let generationRequested = false;
+    await withFetch(async (input) => {
+      if (String(input).includes("batchEmbedContents")) {
+        return new Response("provider unavailable", { status: 503 });
+      }
+
+      generationRequested = true;
+      return makeTutorResponse("Unsupported response.");
+    }, async () => {
+      const response = await POST(
+        makeRequest({
+          message: "Explain binary recursion algorithms",
+          documentText: "This note mentions a binary tree, but says nothing about recursion or algorithms.",
+        }),
+      );
+
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.deepEqual(body.sources, []);
+      assert.equal(
+        body.reply,
+        "I couldn't find supporting information for that question in the uploaded material.",
+      );
+      assert.equal(body.retrievalMode, "keyword");
+      assert.equal(generationRequested, false);
+    });
+  });
+});
+
 test("a document summary can retrieve relevant passages without lexical overlap", async () => {
   await withApiKey("test-key", async () => {
     let generationRequested = false;

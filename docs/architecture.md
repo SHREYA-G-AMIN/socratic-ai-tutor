@@ -38,13 +38,15 @@ locations.
 ### 3.3 Retrieval System
 Converts document chunks and questions into retrieval embeddings and ranks
 chunks by cosine similarity, using the existing 0.35 minimum cosine score.
-Question-focused semantic matches must also share at least one content term
-with the current question before they can become sources. Document-wide summary
+Question-focused semantic matches must also corroborate up to two distinct
+content terms from the current question (one when that is all the question
+provides) before they can become sources. Document-wide summary
 requests skip this overlap check because the request concerns the uploaded
 document as a whole. If the embedding provider is unavailable, the chat route
 uses the existing keyword retriever and marks the response as a keyword
-fallback. The overlap check may reject valid semantic matches phrased only with
-synonyms or abbreviations not present in the PDF.
+fallback, applying the same topic-term match requirement. The overlap check
+may reject valid semantic matches phrased only with synonyms or abbreviations
+not present in the PDF.
 
 ### 3.4 AI Tutor
 Receives the student's question and retrieved document passages through the
@@ -78,9 +80,10 @@ sessions, process restarts, or reliably across server instances.
 ### Question and Answer
 1. The student submits a question.
 2. The backend retrieves relevant document chunks. A question-focused semantic
-   candidate must meet the cosine cutoff and include a content term shared
-   with the question; document-wide summary requests are exempt from the
-   overlap requirement. Keyword fallback uses its existing keyword matches.
+   candidate must meet the cosine cutoff and corroborate up to two content
+   terms shared with the question (one if there is only one); document-wide
+   summary requests are exempt. Keyword fallback requires the same number of
+   topic-term matches, while summaries select the first document chunks.
 3. If no passages are found, the route returns a fixed no-evidence response and
    does not ask Gemini to generate unsupported course claims.
 4. Otherwise, the chat route sends the retrieved passages, role-filtered

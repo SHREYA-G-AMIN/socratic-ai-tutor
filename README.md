@@ -53,7 +53,7 @@ model can be overridden with `GEMINI_EMBEDDING_MODEL`.
 ## System Workflow
 
 1. The upload route validates a PDF, extracts readable text and page ranges, and returns them to the browser. Scanned PDFs without a text layer are rejected.
-2. The chat route chunks the extracted text and retrieves passages using Gemini embeddings. Question-focused semantic matches must meet the existing cosine cutoff and share at least one content term with the question; document-wide summary requests do not require term overlap. On embedding failure, keyword matching is used.
+2. The chat route chunks the extracted text and retrieves passages using Gemini embeddings. Question-focused semantic matches must meet the existing cosine cutoff and corroborate up to two distinct content terms from the question (one when that is all the question provides); document-wide summary requests do not require term overlap. On embedding failure, keyword matching applies the same topic-term rule.
 3. If no passages are found, the route returns a fixed no-evidence response without calling Gemini.
 4. Otherwise, it sends retrieved passages, intent/adaptation instructions, and the existing conversation history to Gemini once.
 5. The response includes tutor text, citations, retrieval mode, optional warning, and an optional Mermaid diagram.
@@ -108,7 +108,7 @@ socratic-ai-tutor/
 ## Current Limitations
 
 - Confusion detection uses phrase patterns and exact normalized question repeats; paraphrase/sentiment recognition is not implemented.
-- Semantic matching also requires lexical corroboration for question-focused requests. This can decline relevant passages when a question uses only synonyms or abbreviations absent from the PDF; document-wide summaries are exempt from the overlap check.
+- Question-focused retrieval requires matching up to two distinct content terms, so relevant passages expressed only with synonyms or abbreviations may be declined. Document-wide summaries are exempt from the overlap check.
 - Gemini grounding and diagram correctness are instructed and no-evidence outputs are suppressed, but supported prose is not deterministically fact-checked.
 - Embedding cache is in-process and bounded; it is not durable across restarts or instances.
 - No OCR, database, persisted chat history, or deployment configuration is included.

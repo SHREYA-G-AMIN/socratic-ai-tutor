@@ -80,6 +80,54 @@ test("retrieveRelevantChunks returns matches sorted by score", () => {
   }
 });
 
+test("retrieveRelevantChunks rejects a weak one-term match for a multi-term question", () => {
+  const chunks = makeChunks([
+    "A binary tree is discussed, but recursion and algorithms are absent.",
+    "The weather is nice today.",
+  ]);
+
+  const results = retrieveRelevantChunks(
+    chunks,
+    "Explain binary recursion algorithms",
+  );
+
+  assert.deepEqual(results, []);
+});
+
+test("retrieveRelevantChunks accepts content-term corroboration for relevant questions", () => {
+  const chunks = makeChunks([
+    "A binary tree is used by this unrelated note.",
+    "Binary search algorithms organize data to find values efficiently.",
+  ]);
+
+  const results = retrieveRelevantChunks(
+    chunks,
+    "Explain binary search algorithms",
+  );
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].chunk, chunks[1].text);
+  assert.equal(results[0].score, 3);
+});
+
+test("retrieveRelevantChunks returns document passages for a whole-document summary", () => {
+  const chunks = makeChunks(["First topic.", "Second topic.", "Third topic.", "Fourth topic."]);
+
+  const results = retrieveRelevantChunks(
+    chunks,
+    "Summarize my PDF",
+    3,
+    [],
+    { minimumMatches: 0 },
+  );
+
+  assert.deepEqual(results.map((result) => result.chunk), [
+    "First topic.",
+    "Second topic.",
+    "Third topic.",
+  ]);
+});
+
 test("retrieveRelevantChunks returns empty array when no keywords match", () => {
   const chunks = makeChunks([
     "The weather is nice today.",

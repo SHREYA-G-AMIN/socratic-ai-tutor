@@ -18,6 +18,21 @@ const NON_CONTENT_QUERY_TERMS = new Set([
   "after",
   "also",
   "does",
+  "explain",
+  "definition",
+  "compare",
+  "comparison",
+  "list",
+  "summarize",
+  "summarise",
+  "summary",
+  "document",
+  "chapter",
+  "notes",
+  "describe",
+  "show",
+  "tell",
+  "give",
   "from",
   "have",
   "into",
@@ -118,10 +133,15 @@ export function retrieveRelevantChunks(
   message: string,
   maxResults: number = 3,
   pageRanges: DocumentPageRange[] = [],
+  options: { minimumMatches?: number } = {},
 ): RetrievalResult[] {
-  const keywords = extractKeywords(message);
+  const keywords = getContentQueryTerms(message);
+  // Two distinct topic terms prevent one incidental token from creating a citation.
+  // A one-term query can still be searched with that single available signal.
+  const minimumMatches =
+    options.minimumMatches ?? Math.min(2, keywords.length);
 
-  if (keywords.length === 0 || chunks.length === 0) {
+  if (chunks.length === 0 || (keywords.length === 0 && minimumMatches > 0)) {
     return [];
   }
 
@@ -134,7 +154,7 @@ export function retrieveRelevantChunks(
       end: chunk.end,
       pageNumbers: getPageNumbers(chunk, pageRanges),
     }))
-    .filter((result) => result.score > 0)
+    .filter((result) => result.score >= minimumMatches)
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, maxResults);
 }
@@ -152,6 +172,7 @@ export async function retrieveSemanticallyRelevantChunks(
     embedder?: EmbeddingBatch;
     model?: string;
     requireLexicalCorroboration?: boolean;
+    minimumContentMatches?: number;
   } = {},
 ): Promise<RetrievalResult[]> {
   if (chunks.length === 0 || !message.trim()) {
@@ -186,6 +207,10 @@ export async function retrieveSemanticallyRelevantChunks(
   const queryTerms = getContentQueryTerms(message);
   const requireLexicalCorroboration =
     options.requireLexicalCorroboration ?? true;
+  const minimumContentMatches =
+    options.minimumContentMatches ?? Math.min(2, queryTerms.length);
+  // Keep the established cosine cutoff, but do not cite a high-scoring passage
+  // unless it also matches the question's available content terms.
   const results = chunks
     .map((chunk, index) => {
       const documentVector = documentVectors[index];
@@ -208,7 +233,8 @@ export async function retrieveSemanticallyRelevantChunks(
         result.score >= MINIMUM_SEMANTIC_SIMILARITY &&
         (!requireLexicalCorroboration ||
           queryTerms.length === 0 ||
-          queryTerms.some((term) => result.contentTerms.has(term))),
+          queryTerms.filter((term) => result.contentTerms.has(term)).length >=
+            minimumContentMatches),
     )
     .map(({ contentTerms: _contentTerms, ...result }) => result)
     .sort((left, right) => right.score - left.score || left.index - right.index);

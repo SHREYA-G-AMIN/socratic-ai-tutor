@@ -120,6 +120,7 @@ export async function POST(request: Request) {
         message.trim(),
         MAX_RETRIEVED_CHUNKS,
         pageRanges,
+        { minimumMatches: intent === "summary" ? 0 : undefined },
       );
     }
 

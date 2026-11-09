@@ -13,7 +13,7 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 - [Complete] Split extracted text into overlapping chunks and map citations to pages where available.
 - [Complete] Retrieve semantically relevant chunks using Gemini embeddings.
 - [Complete] Fall back to keyword retrieval if semantic embeddings fail and return a warning.
-- [Complete] Require semantic score cutoff plus content-term corroboration for focused questions; allow document-wide summaries without term overlap.
+- [Complete] Require the existing semantic score cutoff plus up to two distinct content-term matches for focused questions; keyword fallback uses the same overlap rule. Document-wide summaries are exempt and remain retrievable.
 - [Partial] Persist document vectors — a bounded in-process cache is used; there is no durable vector store.
 - [Complete] Return a no-evidence response without invoking Gemini when retrieval finds no sources.
 - [Partial] Support scanned PDFs — OCR is not implemented.
@@ -53,8 +53,8 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 - No OCR, database, durable chat history, or persistent vector store.
 - Retrieval depends on the provided document and configured Gemini API; keyword
   fallback is less effective for semantically related terms.
-- Semantic matching requires a shared content term for question-focused
-  requests; valid synonym-only or abbreviation-only matches may be declined.
+- Focused semantic/keyword retrieval requires up to two distinct topic-term
+  matches; valid synonym-only or abbreviation-only matches may be declined.
 - Model output quality and grounding are not deterministically verified.
 - Automated Gemini route tests use mocked provider calls and do not assess live
   model behavior.
