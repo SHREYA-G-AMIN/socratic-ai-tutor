@@ -63,6 +63,7 @@ export default function Home() {
   const handleDocumentUploaded = (doc: DocumentUploadSuccessData) => {
     documentSessionRef.current += 1;
     setUploadedDocument(doc);
+    setMobileTab("chat");
     setMessages(INITIAL_MESSAGES);
     setInputValue("");
     setChatError(null);

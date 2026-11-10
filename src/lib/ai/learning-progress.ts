@@ -15,7 +15,7 @@ export interface LearningProgress {
 }
 
 const HINT_REQUEST =
-  /\b(?:hint|clue|nudge|help me get started)\b/i;
+  /\b(?:(?:can|could|would|may)\s+(?:i\s+(?:get|have)|you\s+(?:give|offer|provide|share)(?:\s+me)?)|(?:i\s+(?:need|want)|please\s+(?:give|provide)(?:\s+me)?|(?:give|provide|offer)\s+me))\s+(?:(?:a|some)\s+)?(?:small\s+)?(?:hint|clue|nudge)\b|\bhelp me get started\b|^\s*(?:hint|clue|nudge)(?:\s+please)?\s*[?.!]*$/i;
 const CONFIRMED_FEEDBACK =
   /^(?:yes\b|correct\b|exactly\b|that's right\b|that is correct\b|you(?:'re| are) right\b|you got it\b|well done\b)/i;
 const CORRECTIVE_FEEDBACK =

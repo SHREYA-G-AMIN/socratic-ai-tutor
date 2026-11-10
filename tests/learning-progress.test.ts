@@ -49,6 +49,14 @@ test("hint requests and confusion evidence are reflected without diagnosing stud
   assert.doesNotMatch(progress.description, /frustrated|diagnos/i);
 });
 
+test("mentioning a hint without requesting one does not inflate hint progress", () => {
+  const progress = getLearningProgress([
+    { role: "student", text: "The hint helped me understand the left subtree." },
+  ]);
+
+  assert.equal(progress.hints, 0);
+});
+
 test("mild requests for support count without counting carried context again", () => {
   const progress = getLearningProgress([
     { role: "tutor", text: "What does this step mean?" },
