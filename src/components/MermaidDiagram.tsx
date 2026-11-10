@@ -6,6 +6,7 @@ import {
   diagramToMermaidSource,
   MAX_MERMAID_SOURCE_LENGTH,
   renderMermaidSafely,
+  validateGroundedDiagram,
   type DiagramData,
   type MermaidRenderResult,
 } from "@/lib/ai/visual-explanations";
@@ -13,15 +14,21 @@ import { useTheme } from "@/lib/theme";
 
 export function MermaidDiagram({
   data,
+  sourcePassages,
   source,
 }: {
   data?: DiagramData;
+  sourcePassages?: string[];
   source?: string;
 }) {
   const { theme } = useTheme();
   const diagramId = `tutor-diagram-${useId().replaceAll(":", "")}`;
   const mermaidSource =
-    data === undefined ? source ?? null : diagramToMermaidSource(data);
+    data === undefined
+      ? source ?? null
+      : diagramToMermaidSource(
+          validateGroundedDiagram(data, sourcePassages ?? []),
+        );
   const [renderState, setRenderState] = useState<{
     source: string | null;
     result: MermaidRenderResult;

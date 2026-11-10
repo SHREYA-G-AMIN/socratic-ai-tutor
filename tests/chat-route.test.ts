@@ -545,6 +545,56 @@ test("an unsupported follow-up does not use a prior tutor answer as retrieval ev
   });
 });
 
+test("repeated corrected answers trigger a different high-support strategy", async () => {
+  await withApiKey("test-key", async () => {
+    let geminiRequest: Record<string, unknown> | undefined;
+    await withFetch(async (input, init) => {
+      const url = String(input);
+      if (url.includes("batchEmbedContents")) {
+        return new Response("provider unavailable", { status: 503 });
+      }
+
+      geminiRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeTutorResponse(
+        "Let's use the wording from the passage. What direction does it give for a smaller target?",
+      );
+    }, async () => {
+      const response = await POST(
+        makeRequest({
+          message: "The target goes to the right child.",
+          documentText:
+            "If the target is smaller than the current node, continue to the left child. If the target is larger than the current node, continue to the right child.",
+          history: [
+            {
+              role: "tutor",
+              text: "What happens when the target is smaller than the current node?",
+            },
+            { role: "student", text: "The target goes to the right child." },
+            {
+              role: "tutor",
+              text: "Not quite. The passage directs a smaller target to the left child.",
+            },
+          ],
+        }),
+      );
+
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.retrievalMode, "keyword");
+      assert.ok(body.sources.length > 0);
+      assert.ok(geminiRequest);
+      const request = geminiRequest as {
+        systemInstruction: { parts: Array<{ text: string }> };
+      };
+      const instructions = request.systemInstruction.parts[0].text;
+      assert.match(instructions, /high support cues/i);
+      assert.match(instructions, /do not repeat the same explanation/i);
+      assert.match(instructions, /one relevant follow-up question/i);
+      assert.match(instructions, /only.*retrieved document passages/i);
+    });
+  });
+});
+
 test("partially supported multi-part questions decline without Gemini", async () => {
   await withApiKey("test-key", async () => {
     let generationRequested = false;

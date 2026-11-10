@@ -53,6 +53,50 @@ test("repeated unsuccessful attempts and frustration support high severity", () 
   assert.ok(assessment.signals.includes("explicit-frustration"));
 });
 
+test("repeating an answer after an explicit tutor correction triggers high support", () => {
+  const assessment = detectConfusion("The answer is 12.", [
+    { role: "tutor", text: "What is 4 times 2?" },
+    { role: "student", text: "The answer is 12." },
+    { role: "tutor", text: "Not quite. Try grouping 4 objects twice." },
+  ]);
+
+  assert.equal(assessment.severity, "high");
+  assert.ok(assessment.signals.includes("repeated-mistake"));
+});
+
+test("an answer is not treated as a repeated mistake without corrective feedback", () => {
+  const assessment = detectConfusion("The answer is 12.", [
+    { role: "tutor", text: "What is 4 times 2?" },
+    { role: "student", text: "The answer is 12." },
+    { role: "tutor", text: "Let's look at another example." },
+  ]);
+
+  assert.equal(assessment.severity, "none");
+  assert.ok(!assessment.signals.includes("repeated-mistake"));
+});
+
+test("prior difficulty carries into later questions in the same conversation", () => {
+  const assessment = detectConfusion("What should I check next?", [
+    { role: "student", text: "I don't understand this step." },
+    { role: "tutor", text: "Let's review the relevant sentence." },
+  ]);
+
+  assert.equal(assessment.severity, "mild");
+  assert.ok(assessment.signals.includes("prior-difficulty"));
+});
+
+test("multiple difficulty turns progressively increase support", () => {
+  const assessment = detectConfusion("Can we try another example?", [
+    { role: "student", text: "I don't understand this step." },
+    { role: "tutor", text: "Let's review the relevant sentence." },
+    { role: "student", text: "I still got the answer wrong." },
+    { role: "tutor", text: "Let's examine the first part." },
+  ]);
+
+  assert.equal(assessment.severity, "moderate");
+  assert.ok(assessment.signals.includes("prior-difficulty"));
+});
+
 test("student evidence is considered while tutor turns are not counted as failures", () => {
   const assessment = detectConfusion("Can we go more slowly?", [
     { role: "tutor", text: "I don't understand; let me try again." },

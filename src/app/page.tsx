@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { DocumentPreview } from "@/components/DocumentPreview";
 import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { PdfUploader } from "@/components/PdfUploader";
+import { getLearningProgress } from "@/lib/ai/learning-progress";
 import type { ChatResponse, ChatSourceReference } from "@/types/chat";
 import type { DiagramData } from "@/lib/ai/visual-explanations";
 import type {
@@ -45,7 +46,10 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [inputValue, setInputValue] = useState("");
   const [mobileTab, setMobileTab] = useState<"document" | "chat">("document");
+  const [retryHint, setRetryHint] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const documentSessionRef = useRef(0);
+  const learningProgress = getLearningProgress(messages);
 
   // Auto-scroll chat to latest message
   useEffect(() => {
@@ -54,8 +58,23 @@ export default function Home() {
 
   // When a document is uploaded, switch to chat on mobile if appropriate
   const handleDocumentUploaded = (doc: DocumentUploadSuccessData) => {
+    documentSessionRef.current += 1;
     setUploadedDocument(doc);
+    setMessages(INITIAL_MESSAGES);
+    setInputValue("");
     setChatError(null);
+    setRetryHint(false);
+    setIsLoading(false);
+  };
+
+  const handleDocumentReset = () => {
+    documentSessionRef.current += 1;
+    setUploadedDocument(null);
+    setMessages(INITIAL_MESSAGES);
+    setInputValue("");
+    setChatError(null);
+    setRetryHint(false);
+    setIsLoading(false);
   };
 
   const handleHintClick = async () => {
@@ -68,10 +87,12 @@ export default function Home() {
       role: "student", 
       text: "Can you give me a small hint to help me figure this out on my own?" 
     };
-    
+
     setMessages((prev) => [...prev, hintRequestMsg]);
+    const requestDocumentSession = documentSessionRef.current;
     setIsLoading(true);
     setChatError(null);
+    setRetryHint(false);
 
     try {
       const response: Response = await fetch("/api/chat", {
@@ -89,6 +110,7 @@ export default function Home() {
       });
 
       const body = await response.json();
+      if (requestDocumentSession !== documentSessionRef.current) return;
 
       if (!response.ok) {
         const errorBody = body as { error?: string };
@@ -107,14 +129,20 @@ export default function Home() {
           warning: chatBody.warning,
         },
       ]);
+      setRetryHint(false);
     } catch (error) {
+      if (requestDocumentSession !== documentSessionRef.current) return;
+      setMessages((prev) => prev.filter((message) => message !== hintRequestMsg));
       setChatError(
         error instanceof Error
           ? error.message
           : "An unexpected error occurred. Please try again.",
       );
+      setRetryHint(true);
     } finally {
-      setIsLoading(false);
+      if (requestDocumentSession === documentSessionRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -129,8 +157,10 @@ export default function Home() {
     const userMsg: Message = { role: "student", text: inputValue.trim() };
     setMessages((prev) => [...prev, userMsg]);
     setInputValue("");
+    const requestDocumentSession = documentSessionRef.current;
     setIsLoading(true);
     setChatError(null);
+    setRetryHint(false);
 
     try {
       const response: Response = await fetch("/api/chat", {
@@ -148,6 +178,7 @@ export default function Home() {
       });
 
       const body = await response.json();
+      if (requestDocumentSession !== documentSessionRef.current) return;
 
       if (!response.ok) {
         const errorBody = body as { error?: string };
@@ -167,20 +198,26 @@ export default function Home() {
         },
       ]);
     } catch (error) {
+      if (requestDocumentSession !== documentSessionRef.current) return;
+      setMessages((prev) => prev.filter((message) => message !== userMsg));
       setInputValue(userMsg.text);
       setChatError(
         error instanceof Error
           ? error.message
           : "An unexpected error occurred. Please try again.",
       );
+      setRetryHint(false);
     } finally {
-      setIsLoading(false);
+      if (requestDocumentSession === documentSessionRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(event.target.value);
     setChatError(null);
+    setRetryHint(false);
   };
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -238,7 +275,7 @@ export default function Home() {
           {uploadedDocument ? (
             <DocumentPreview
               document={uploadedDocument}
-              onReset={() => setUploadedDocument(null)}
+              onReset={handleDocumentReset}
             />
           ) : (
             <div className="flex flex-col h-full min-h-0 overflow-hidden">
@@ -305,11 +342,31 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-elevated border border-border-subtle text-[11px] font-medium text-text-secondary">
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-elevated border border-border-subtle text-[11px] font-medium text-text-secondary"
+            >
               <span className="w-2 h-2 rounded-full bg-success shrink-0" />
-              <span>Active</span>
+              <span>{isLoading ? "Thinking…" : "Ready"}</span>
             </div>
           </header>
+
+          <section
+            aria-label="Learning progress"
+            aria-live="polite"
+            className="shrink-0 border-b border-border bg-surface px-4 py-2.5"
+          >
+            <p className="text-xs font-semibold text-text-secondary">
+              Understanding:{" "}
+              <span className="font-medium text-text-primary">
+                {learningProgress.label}
+              </span>
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
+              {learningProgress.description}
+            </p>
+          </section>
 
           {/* Scrollable message history */}
           <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4">
@@ -345,6 +402,7 @@ export default function Home() {
                   {(msg.diagramData || msg.diagram) && (
                     <MermaidDiagram
                       data={msg.diagramData}
+                      sourcePassages={msg.sources?.map((source) => source.text)}
                       source={msg.diagram}
                     />
                   )}
@@ -378,28 +436,49 @@ export default function Home() {
             ))}
 
             {chatError && (
-              <div className="flex items-start gap-2.5 justify-start">
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="flex items-start gap-2.5 justify-start"
+              >
                 <div className="w-7 h-7 rounded-lg bg-error-text/10 border border-error-text/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
                   !
                 </div>
                 <div className="bg-error-text/10 border border-error-text/30 px-4 py-3 rounded-2xl rounded-tl-xs text-error-text shadow-xs">
                   <p>{chatError}</p>
+                  {retryHint && (
+                    <button
+                      type="button"
+                      onClick={handleHintClick}
+                      disabled={isLoading || !uploadedDocument}
+                      className="mt-2 rounded-lg border border-error-text/30 px-2.5 py-1 text-xs font-semibold hover:bg-error-text/10 disabled:opacity-50"
+                    >
+                      Retry hint
+                    </button>
+                  )}
                 </div>
               </div>
             )}
 
             {isLoading && (
-              <div className="flex items-start gap-2.5 justify-start">
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-start gap-2.5 justify-start"
+              >
                 <div className="w-7 h-7 rounded-lg bg-surface-elevated border border-border text-accent-primary flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
                   S
                 </div>
                 <div className="bg-surface-elevated border border-border px-4 py-3 rounded-2xl rounded-tl-xs text-text-primary shadow-xs flex items-center gap-1.5">
-                  <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce" />
+                  <span className="sr-only">The tutor is preparing a response.</span>
+                  <div aria-hidden="true" className="w-2 h-2 bg-text-muted rounded-full animate-bounce" />
                   <div
+                    aria-hidden="true"
                     className="w-2 h-2 bg-text-muted rounded-full animate-bounce"
                     style={{ animationDelay: "150ms" }}
                   />
                   <div
+                    aria-hidden="true"
                     className="w-2 h-2 bg-text-muted rounded-full animate-bounce"
                     style={{ animationDelay: "300ms" }}
                   />

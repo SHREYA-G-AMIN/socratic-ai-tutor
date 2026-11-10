@@ -147,6 +147,24 @@ test("mild confusion adapts Socratic guidance with simpler wording and a small h
   assert.match(instructions, /let the student correct you/i);
 });
 
+test("adaptive Socratic guidance changes strategy and asks one grounded check-in", () => {
+  const instructions = getTutorInstructions("socratic", "high");
+
+  assert.match(instructions, /do not repeat the same explanation/i);
+  assert.match(instructions, /different passage-supported representation/i);
+  assert.match(instructions, /one relevant follow-up question/i);
+  assert.match(instructions, /grounded in the retrieved passages/i);
+  assert.match(instructions, /do not add unrelated questions/i);
+});
+
+test("adaptive direct requests never add a follow-up question", () => {
+  const instructions = getTutorInstructions("direct", "high");
+
+  assert.match(instructions, /do not repeat the same explanation/i);
+  assert.match(instructions, /do not ask a follow-up question for an explicit information request/i);
+  assert.match(instructions, /do not turn the response into a hint or Socratic question/i);
+});
+
 test("no confusion preserves normal Socratic guidance without adaptation cues", () => {
   const instructions = getTutorInstructions("socratic", "none");
 

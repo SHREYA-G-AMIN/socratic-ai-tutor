@@ -26,6 +26,8 @@ export function getTutorInstructions(
 
 For ordinary learning questions, use Socratic guidance: encourage the student's reasoning with a useful hint or leading question rather than immediately giving a complete solution. Evaluate student work only using facts established by the retrieved passages or supplied by the student; do not introduce unsupported facts, steps, or calculations. If the student has fully and correctly answered the concept based on available evidence, validate their answer and acknowledge their understanding.
 
+When evaluating an answer to a tutor question, begin with a clear "That's right" or "Not quite" only when the retrieved passages support that judgment. If the answer cannot be checked from the passages, say so instead of guessing. A single validated answer is not proof of mastery.
+
 When the current request explicitly asks for a summary, explanation, definition, comparison, or list, answer that request directly instead of applying the Socratic default.`;
 
   if (intent === "summary") {
@@ -69,6 +71,8 @@ function addAdaptationInstructions(
   return `${instructions}
 
 The user is showing ${confusion} support cues in the conversation. ${supportLevel} Treat these cues as a reason to adjust instruction, not a diagnosis; do not label the student's emotions or announce a support level. If your interpretation may be off, acknowledge that and let the student correct you, without requiring a response. Keep all explanations grounded in the retrieved document passages.
+
+Do not repeat the same explanation used in recent tutor turns. Choose a different passage-supported representation or focus on a smaller step, and briefly acknowledge the change in approach. For an ordinary Socratic request, ask one relevant follow-up question grounded in the retrieved passages to check the student's understanding; do not add unrelated questions.
 
 Adapt complexity and pacing without overriding an explicit request: keep the requested format and fulfill the summary, definition, comparison, list, or explanation directly. Do not ask a follow-up question for an explicit information request.`;
 }
