@@ -214,6 +214,115 @@ test("high-scoring unrelated semantic retrieval declines without Gemini or misle
   });
 });
 
+test("a repeated BST revision question retrieves its explanatory passages", async () => {
+  await withApiKey("test-key", async () => {
+    let geminiRequest: Record<string, unknown> | undefined;
+    const documentText = `Data Structures: Binary Search Trees
+Sample text-based PDF for testing the Socratic AI Tutor upload and extraction pipeline
+1. What is a Binary Search Tree?
+A Binary Search Tree (BST) is a binary tree that stores values in an ordered way. For each node, values smaller than the node are stored in its left subtree, while values greater than the node are stored in its right subtree. This ordering property makes searching, insertion, and deletion efficient when the tree is reasonably balanced.
+2. Example
+Suppose we insert the values 8, 3, 10, 1, 6, and 14 in that order. The root is 8. The value 3 becomes the left child of 8, and 10 becomes the right child. The value 1 goes to the left of 3, while 6 goes to the right of 3. The value 14 becomes the right child of 10.
+3. Searching in a BST
+To search for a target value, begin at the root. If the target equals the current node, the search succeeds. If the target is smaller, continue to the left child. If the target is larger, continue to the right child. Repeat until the value is found or the search reaches an empty child.
+4. Complexity
+The average time complexity of search, insertion, and deletion in a balanced BST is O(log n), where n is the number of nodes. In the worst case, an unbalanced BST can behave like a linked list, making these operations O(n).
+Revision Questions
+Use these questions to test whether the PDF text is extracted correctly.
+Question 1
+Why does a BST compare the target value with the current node before choosing a subtree?
+Question 2
+What values would you visit when searching for 6 in the example tree?
+Question 3
+Why can a BST operation take O(n) time in the worst case?
+Key terms
+Binary tree; root; node; left subtree; right subtree; search; insertion; deletion; balanced tree; time complexity.
+`;
+
+    await withFetch(async (input, init) => {
+      const url = String(input);
+      if (url.includes("batchEmbedContents")) {
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<{
+            taskType: string;
+            content: { parts: Array<{ text: string }> };
+          }>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(({ taskType, content }) => {
+            if (taskType === "RETRIEVAL_QUERY") {
+              return { values: [1, 0] };
+            }
+
+            const text = content.parts[0].text.toLowerCase();
+            if (text.includes("revision questions")) {
+              return { values: [1, 0] };
+            }
+            if (text.startsWith("bst\nto search for a target value")) {
+              return { values: [0.9, Math.sqrt(1 - 0.9 ** 2)] };
+            }
+            if (text.includes("values smaller than the node")) {
+              const score = 0.6783689;
+              return { values: [score, Math.sqrt(1 - score ** 2)] };
+            }
+            if (text.includes("key terms")) {
+              const score = 0.6789172;
+              return { values: [score, Math.sqrt(1 - score ** 2)] };
+            }
+            const score = 0.7199706;
+            return { values: [score, Math.sqrt(1 - score ** 2)] };
+          }),
+        });
+      }
+
+      geminiRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeTutorResponse(
+        "The ordering property lets the comparison direct the search to the subtree that can contain the target.",
+      );
+    }, async () => {
+      const response = await POST(
+        makeRequest({
+          message:
+            "Why does a BST compare the target value with the current node before choosing a subtree?",
+          documentText,
+          fileName: "bst_text_extraction_test.pdf",
+        }),
+      );
+
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.retrievalMode, "semantic");
+      assert.match(body.reply, /ordering property/i);
+      assert.ok(
+        body.sources.some((source: { text: string }) =>
+          source.text.includes("To search for a target value"),
+        ),
+      );
+      assert.ok(
+        body.sources.some((source: { text: string }) =>
+          source.text.includes("values smaller than the node"),
+        ),
+      );
+      assert.ok(geminiRequest);
+      const request = geminiRequest as {
+        systemInstruction: { parts: Array<{ text: string }> };
+        contents: Array<{ role: string; parts: Array<{ text: string }> }>;
+      };
+      assert.match(
+        request.systemInstruction.parts[0].text,
+        /passages jointly establish a mechanism or entail a conclusion/i,
+      );
+      assert.match(
+        request.systemInstruction.parts[0].text,
+        /do not require the document to state the cause verbatim/i,
+      );
+      const context = request.contents.at(-1)?.parts[0].text ?? "";
+      assert.match(context, /To search for a target value/);
+      assert.match(context, /values smaller than the node/);
+    });
+  });
+});
+
 test("a document summary falls back to document passages when semantic scores are too low", async () => {
   await withApiKey("test-key", async () => {
     let generationRequested = false;

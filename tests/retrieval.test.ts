@@ -7,6 +7,7 @@ register("./server-only-hook.mjs", import.meta.url);
 const {
   extractKeywords,
   scoreChunk,
+  getContentQueryTerms,
   retrieveRelevantChunks,
   retrieveSemanticallyRelevantChunks,
   cosineSimilarity,
@@ -103,6 +104,48 @@ test("retrieveRelevantChunks requires corroboration for every question topic ter
     retrieveRelevantChunks(
       chunks,
       "Explain binary search tree properties and photosynthesis",
+    ),
+    [],
+  );
+});
+
+test("retrieval ignores question-action phrasing when selecting topic evidence", () => {
+  assert.deepEqual(
+    getContentQueryTerms(
+      "Why does a BST compare the target value with the current node before choosing a subtree?",
+    ),
+    ["target", "value", "current", "node", "subtree"],
+  );
+});
+
+test("keyword retrieval does not treat a repeated question as its own evidence", () => {
+  const chunks = makeChunks([
+    "Question 1\nWhy does a BST compare the target value with the current node before choosing a subtree?",
+    "For each node, values smaller than the node are stored in its left subtree, while values greater than the node are stored in its right subtree.",
+    "To search for a target value, begin at the root. If the target equals the current node, the search succeeds. If the target is smaller, continue to the left child. If the target is larger, continue to the right child.",
+  ]);
+
+  const results = retrieveRelevantChunks(
+    chunks,
+    "Why does a BST compare the target value with the current node before choosing a subtree?",
+  );
+
+  assert.deepEqual(
+    results.map((result) => result.chunk),
+    [chunks[2].text, chunks[1].text],
+  );
+  assert.ok(results.every((result) => !result.chunk.includes("Question 1")));
+});
+
+test("a repeated question alone is not keyword evidence", () => {
+  const chunks = makeChunks([
+    "Question 1\nWhy does a BST compare the target value with the current node before choosing a subtree?",
+  ]);
+
+  assert.deepEqual(
+    retrieveRelevantChunks(
+      chunks,
+      "Why does a BST compare the target value with the current node before choosing a subtree?",
     ),
     [],
   );
@@ -356,6 +399,56 @@ test("semantic retrieval rejects partial topic coverage despite high similarity"
     chunks,
     "Explain binary search tree properties and photosynthesis",
     { embedder, model: "test-partial-topic-coverage-model" },
+  );
+
+  assert.deepEqual(results, []);
+});
+
+test("semantic retrieval selects BST explanation instead of the repeated question", async () => {
+  const chunks = makeChunks([
+    "Question 1\nWhy does a BST compare the target value with the current node before choosing a subtree?",
+    "To search for a target value, begin at the root. If the target equals the current node, the search succeeds. If the target is smaller, continue to the left child. If the target is larger, continue to the right child.",
+    "For each node, values smaller than the node are stored in its left subtree, while values greater than the node are stored in its right subtree.",
+    "Key terms: binary tree; root; node; left subtree; right subtree.",
+  ]);
+  const embedder = async (texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY"
+      ? [[1, 0]]
+      : texts.map((text) => {
+          const score = text.startsWith("To search")
+            ? 0.740799
+            : text.startsWith("For each node")
+              ? 0.6783689
+              : text.startsWith("Key terms")
+                ? 0.6789172
+                : 1;
+          return [score, Math.sqrt(1 - score ** 2)];
+        });
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "Why does a BST compare the target value with the current node before choosing a subtree?",
+    { embedder, model: "test-repeated-question-evidence-model" },
+  );
+
+  assert.deepEqual(
+    results.map((result) => result.chunk),
+    [chunks[1].text, chunks[2].text],
+  );
+  assert.ok(!results.some((result) => result.chunk.includes("Key terms")));
+});
+
+test("a repeated question alone is not semantic evidence", async () => {
+  const chunks = makeChunks([
+    "Question 1\nWhy does a BST compare the target value with the current node before choosing a subtree?",
+  ]);
+  const embedder = async (_texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY" ? [[1, 0]] : [[1, 0]];
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "Why does a BST compare the target value with the current node before choosing a subtree?",
+    { embedder, model: "test-question-alone-is-not-evidence" },
   );
 
   assert.deepEqual(results, []);

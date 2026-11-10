@@ -19,6 +19,9 @@ const NON_CONTENT_QUERY_TERMS = new Set([
   "also",
   "does",
   "explain",
+  "before",
+  "choose",
+  "choosing",
   "definition",
   "compare",
   "comparison",
@@ -159,12 +162,13 @@ export function retrieveRelevantChunks(
 
   const candidates = chunks
     .map((chunk) => {
-      const contentTerms = new Set(getContentQueryTerms(chunk.text));
+      const evidenceText = getEvidenceText(chunk.text);
+      const contentTerms = new Set(getContentQueryTerms(evidenceText));
       const matchingTerms = new Set(
         keywords.filter(
           (keyword) =>
             contentTerms.has(keyword) ||
-            scoreChunk(chunk.text, [keyword]) > 0,
+            scoreChunk(evidenceText, [keyword]) > 0,
         ),
       );
 
@@ -185,7 +189,7 @@ export function retrieveRelevantChunks(
   );
   const results = (completeCandidates.length > 0
     ? completeCandidates
-    : candidates
+    : selectCoverageResults(candidates, keywords, maxResults)
   ).slice(0, maxResults);
 
   if (
@@ -274,7 +278,9 @@ export async function retrieveSemanticallyRelevantChunks(
 
       return {
         chunk: chunk.text,
-        contentTerms: new Set(getContentQueryTerms(chunk.text)),
+        contentTerms: new Set(
+          getContentQueryTerms(getEvidenceText(chunk.text)),
+        ),
         score: cosineSimilarity(queryVector, documentVector),
         index: chunk.index,
         start: chunk.start,
@@ -297,10 +303,14 @@ export async function retrieveSemanticallyRelevantChunks(
   );
   const selected = (completeResults.length > 0 ? completeResults : results)
     .slice(0, options.maxResults ?? 3);
+  const coverageSelected =
+    completeResults.length > 0 || !requireLexicalCorroboration
+      ? selected
+      : selectCoverageResults(results, queryTerms, options.maxResults ?? 3);
   if (
     requireLexicalCorroboration &&
     new Set(
-      selected.flatMap((result) =>
+      coverageSelected.flatMap((result) =>
         queryTerms.filter((term) => result.contentTerms.has(term)),
       ),
     ).size < minimumContentMatches
@@ -308,7 +318,7 @@ export async function retrieveSemanticallyRelevantChunks(
     return [];
   }
 
-  return selected.map((result) => ({
+  return coverageSelected.map((result) => ({
     chunk: result.chunk,
     score: result.score,
     index: result.index,
@@ -330,6 +340,67 @@ export function getContentQueryTerms(text: string): string[] {
         ) ?? [],
     ),
   ];
+}
+
+function getEvidenceText(text: string): string {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !sentence.includes("?"))
+    .join(" ");
+}
+
+function selectCoverageResults<T extends {
+  contentTerms: Set<string>;
+  score: number;
+  index: number;
+}>(
+  results: T[],
+  queryTerms: string[],
+  maxResults: number,
+): T[] {
+  const remaining = [...results];
+  const selected: T[] = [];
+  const coveredTerms = new Set<string>();
+
+  while (remaining.length > 0 && selected.length < maxResults) {
+    remaining.sort((left, right) => {
+      const leftCoverage = queryTerms.filter(
+        (term) => left.contentTerms.has(term) && !coveredTerms.has(term),
+      ).length;
+      const rightCoverage = queryTerms.filter(
+        (term) => right.contentTerms.has(term) && !coveredTerms.has(term),
+      ).length;
+      const leftMatchCount = queryTerms.filter((term) =>
+        left.contentTerms.has(term),
+      ).length;
+      const rightMatchCount = queryTerms.filter((term) =>
+        right.contentTerms.has(term),
+      ).length;
+      return (
+        rightCoverage - leftCoverage ||
+        rightMatchCount - leftMatchCount ||
+        right.score - left.score ||
+        left.index - right.index
+      );
+    });
+
+    const next = remaining.shift();
+    if (!next) {
+      break;
+    }
+
+    const newTerms = queryTerms.filter(
+      (term) => next.contentTerms.has(term) && !coveredTerms.has(term),
+    );
+    if (newTerms.length === 0) {
+      break;
+    }
+
+    selected.push(next);
+    newTerms.forEach((term) => coveredTerms.add(term));
+  }
+
+  return selected;
 }
 
 function normalizeContentTerm(term: string): string {

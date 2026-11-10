@@ -112,6 +112,32 @@ test("strict grounding limits course-specific claims to evidence in retrieved pa
   assert.match(instructions, /cannot find the information in the uploaded material/i);
 });
 
+test("strict grounding allows transparent conclusions from combined retrieved facts", () => {
+  const instructions = getTutorInstructions("socratic");
+
+  assert.match(
+    instructions,
+    /passages jointly establish a mechanism or entail a conclusion/i,
+  );
+  assert.match(instructions, /make the reasoning link explicit/i);
+  assert.match(
+    instructions,
+    /neither established nor logically entailed by the passages/i,
+  );
+  assert.match(
+    instructions,
+    /do not require the document to state the cause verbatim or refuse solely because it presents the supporting facts separately/i,
+  );
+  assert.match(
+    instructions,
+    /do not turn a conditional process into a guaranteed outcome/i,
+  );
+  assert.match(
+    instructions,
+    /directly supported by the passages or by reasoning that follows from them/i,
+  );
+});
+
 test("mild confusion adapts Socratic guidance with simpler wording and a small hint", () => {
   const instructions = getTutorInstructions("socratic", "mild");
 
