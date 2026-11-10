@@ -16,6 +16,7 @@ import {
   MAX_PDF_PAGES,
 } from "@/lib/documents/constants";
 import {
+  getContentQueryTerms,
   retrieveRelevantChunks,
   retrieveSemanticallyRelevantChunks,
   type RetrievalResult,
@@ -63,7 +64,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const intent = detectTutoringIntent(message.trim());
+    const currentMessage = message.trim();
+    const intent = detectTutoringIntent(currentMessage);
+    const history = parseChatHistory(body.history);
+    const retrievalMessage = buildRetrievalMessage(currentMessage, history);
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -98,13 +102,25 @@ export async function POST(request: Request) {
     try {
       relevant = await retrieveSemanticallyRelevantChunks(
         chunks,
-        message.trim(),
+        retrievalMessage,
         {
           maxResults: MAX_RETRIEVED_CHUNKS,
           pageRanges,
           requireLexicalCorroboration: intent !== "summary",
         },
       );
+      if (intent === "summary" && relevant.length === 0) {
+        retrievalMode = "keyword";
+        warning =
+          "Semantic retrieval found no passages. Using document-order passages for the summary.";
+        relevant = retrieveRelevantChunks(
+          chunks,
+          currentMessage,
+          MAX_RETRIEVED_CHUNKS,
+          pageRanges,
+          { minimumMatches: 0 },
+        );
+      }
     } catch (error) {
       retrievalMode = "keyword";
       warning =
@@ -117,7 +133,7 @@ export async function POST(request: Request) {
       );
       relevant = retrieveRelevantChunks(
         chunks,
-        message.trim(),
+        retrievalMessage,
         MAX_RETRIEVED_CHUNKS,
         pageRanges,
         { minimumMatches: intent === "summary" ? 0 : undefined },
@@ -134,34 +150,41 @@ export async function POST(request: Request) {
       score: result.score,
     }));
 
-    const contextText =
-      sources.length > 0
-        ? sources
-            .map((source, index) => {
-              const location =
-                source.pageNumbers.length > 0
-                  ? `Pages ${source.pageNumbers.join(", ")}`
-                  : `Text offsets ${source.startChar}-${source.endChar}`;
-              return `Passage ${index + 1} (${location}):\n${source.text}`;
-            })
-            .join("\n\n")
-        : "No direct relevant passages found in the document.";
-    const prompt = `Context Passages:\n${contextText}\n\nUser Question: ${message.trim()}`;
+    if (sources.length === 0) {
+      return NextResponse.json({
+        reply:
+          "I couldn't find supporting information for that question in the uploaded material.",
+        sources,
+        retrievalMode,
+        ...(warning ? { warning } : {}),
+      } satisfies ChatResponse);
+    }
 
-    const history = parseChatHistory(body.history);
+    const contextText =
+      sources
+        .map((source, index) => {
+          const location =
+            source.pageNumbers.length > 0
+              ? `Pages ${source.pageNumbers.join(", ")}`
+              : `Text offsets ${source.startChar}-${source.endChar}`;
+          return `Passage ${index + 1} (${location}):\n${source.text}`;
+        })
+        .join("\n\n");
+    const prompt = `Context Passages:\n${contextText}\n\nUser Question: ${currentMessage}`;
+
     const contents = [...history, { role: "user" as const, parts: [{ text: prompt }] }];
     while (contents.length > 1 && contents[0].role === "model") {
       contents.shift();
     }
 
     const confusion = detectConfusion(
-      message.trim(),
+      currentMessage,
       history.map((turn) => ({
         role: turn.role === "user" ? "student" : "tutor",
         text: turn.parts.map((part) => part.text).join(""),
       })),
     );
-    const diagramRequest = getDiagramRequest(message.trim());
+    const diagramRequest = getDiagramRequest(currentMessage);
     const generatedResponse = await generateTutorReply(
       apiKey,
       contents,
@@ -193,6 +216,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 interface GeminiHistoryMessage {
   role: "user" | "model";
   parts: Array<{ text: string }>;
+}
+
+function buildRetrievalMessage(
+  message: string,
+  history: GeminiHistoryMessage[],
+): string {
+  const isContextDependentFollowUp =
+    getContentQueryTerms(message).length === 0 &&
+    /^(?:why|how|what about|explain|describe|elaborate|expand|clarify|tell me more)\b/i.test(
+      message,
+    );
+
+  if (!isContextDependentFollowUp) {
+    return message;
+  }
+
+  const priorStudentMessage = [...history]
+    .reverse()
+    .find(
+      (turn) =>
+        turn.role === "user" &&
+        getContentQueryTerms(turn.parts.map((part) => part.text).join("")).length > 0,
+    );
+
+  return priorStudentMessage
+    ? `${priorStudentMessage.parts.map((part) => part.text).join("")}\n${message}`
+    : message;
 }
 
 function parseChatHistory(value: unknown): GeminiHistoryMessage[] {

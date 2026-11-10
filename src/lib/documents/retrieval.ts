@@ -33,6 +33,16 @@ const NON_CONTENT_QUERY_TERMS = new Set([
   "show",
   "tell",
   "give",
+  "work",
+  "works",
+  "happen",
+  "happens",
+  "mean",
+  "means",
+  "again",
+  "further",
+  "more",
+  "next",
   "from",
   "have",
   "into",
@@ -136,10 +146,9 @@ export function retrieveRelevantChunks(
   options: { minimumMatches?: number } = {},
 ): RetrievalResult[] {
   const keywords = getContentQueryTerms(message);
-  // Two distinct topic terms prevent one incidental token from creating a citation.
-  // A one-term query can still be searched with that single available signal.
-  const minimumMatches =
-    options.minimumMatches ?? Math.max(1, Math.min(2, keywords.length));
+  const requiredMatches = options.minimumMatches ?? keywords.length;
+  const minimumChunkMatches =
+    options.minimumMatches === 0 ? 0 : Math.min(1, keywords.length);
 
   if (
     chunks.length === 0 ||
@@ -148,18 +157,53 @@ export function retrieveRelevantChunks(
     return [];
   }
 
-  return chunks
-    .map((chunk) => ({
-      chunk: chunk.text,
-      score: scoreChunk(chunk.text, keywords),
-      index: chunk.index,
-      start: chunk.start,
-      end: chunk.end,
-      pageNumbers: getPageNumbers(chunk, pageRanges),
-    }))
-    .filter((result) => result.score >= minimumMatches)
+  const candidates = chunks
+    .map((chunk) => {
+      const contentTerms = new Set(getContentQueryTerms(chunk.text));
+      const matchingTerms = new Set(
+        keywords.filter(
+          (keyword) =>
+            contentTerms.has(keyword) ||
+            scoreChunk(chunk.text, [keyword]) > 0,
+        ),
+      );
+
+      return {
+        chunk: chunk.text,
+        contentTerms: matchingTerms,
+        score: matchingTerms.size,
+        index: chunk.index,
+        start: chunk.start,
+        end: chunk.end,
+        pageNumbers: getPageNumbers(chunk, pageRanges),
+      };
+    })
+    .filter((result) => result.score >= minimumChunkMatches)
     .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, maxResults);
+  const completeCandidates = candidates.filter(
+    (result) => result.score === keywords.length,
+  );
+  const results = (completeCandidates.length > 0
+    ? completeCandidates
+    : candidates
+  ).slice(0, maxResults);
+
+  if (
+    requiredMatches > 0 &&
+    new Set(results.flatMap((result) => [...result.contentTerms])).size <
+    requiredMatches
+  ) {
+    return [];
+  }
+
+  return results.map((result) => ({
+    chunk: result.chunk,
+    score: result.score,
+    index: result.index,
+    start: result.start,
+    end: result.end,
+    pageNumbers: result.pageNumbers,
+  }));
 }
 
 /**
@@ -186,7 +230,9 @@ export async function retrieveSemanticallyRelevantChunks(
   const requireLexicalCorroboration =
     options.requireLexicalCorroboration ?? true;
   const minimumContentMatches =
-    options.minimumContentMatches ?? Math.min(2, queryTerms.length);
+    options.minimumContentMatches ?? queryTerms.length;
+  const minimumChunkMatches =
+    requireLexicalCorroboration ? Math.min(1, queryTerms.length) : 0;
 
   if (requireLexicalCorroboration && queryTerms.length === 0) {
     return [];
@@ -240,11 +286,17 @@ export async function retrieveSemanticallyRelevantChunks(
       (result) =>
         result.score >= MINIMUM_SEMANTIC_SIMILARITY &&
         (!requireLexicalCorroboration ||
-          queryTerms.some((term) => result.contentTerms.has(term))),
+          [...result.contentTerms].filter((term) => queryTerms.includes(term))
+            .length >= minimumChunkMatches),
     )
     .sort((left, right) => right.score - left.score || left.index - right.index);
 
-  const selected = results.slice(0, options.maxResults ?? 3);
+  const completeResults = results.filter(
+    (result) =>
+      queryTerms.every((term) => result.contentTerms.has(term)),
+  );
+  const selected = (completeResults.length > 0 ? completeResults : results)
+    .slice(0, options.maxResults ?? 3);
   if (
     requireLexicalCorroboration &&
     new Set(
@@ -266,17 +318,38 @@ export async function retrieveSemanticallyRelevantChunks(
   }));
 }
 
-function getContentQueryTerms(text: string): string[] {
+export function getContentQueryTerms(text: string): string[] {
   return [
     ...new Set(
       text
         .toLowerCase()
         .match(/[a-z0-9]+/g)
+        ?.map(normalizeContentTerm)
         ?.filter(
           (term) => term.length > 3 && !NON_CONTENT_QUERY_TERMS.has(term),
         ) ?? [],
     ),
   ];
+}
+
+function normalizeContentTerm(term: string): string {
+  if (term.length > 5 && term.endsWith("ies")) {
+    return `${term.slice(0, -3)}y`;
+  }
+  if (term.length > 5 && term.endsWith("ices")) {
+    return `${term.slice(0, -4)}ix`;
+  }
+  if (term.length > 5 && term.endsWith("sses")) {
+    return term.slice(0, -2);
+  }
+  if (
+    term.length > 4 &&
+    term.endsWith("s") &&
+    !/(?:ss|us|is|ics)$/.test(term)
+  ) {
+    return term.slice(0, -1);
+  }
+  return term;
 }
 
 export function cosineSimilarity(left: number[], right: number[]): number {

@@ -94,6 +94,20 @@ test("retrieveRelevantChunks rejects a weak one-term match for a multi-term ques
   assert.deepEqual(results, []);
 });
 
+test("retrieveRelevantChunks requires corroboration for every question topic term", () => {
+  const chunks = makeChunks([
+    "A binary search tree has properties that support efficient key lookup.",
+  ]);
+
+  assert.deepEqual(
+    retrieveRelevantChunks(
+      chunks,
+      "Explain binary search tree properties and photosynthesis",
+    ),
+    [],
+  );
+});
+
 test("retrieveRelevantChunks does not treat a question without topic terms as a summary", () => {
   const chunks = makeChunks([
     "A binary search tree stores keys for efficient lookup.",
@@ -161,7 +175,7 @@ test("retrieveRelevantChunks respects maxResults limit", () => {
     "unrelated text here",
   ]);
 
-  const results = retrieveRelevantChunks(chunks, "binary tree search", 2);
+  const results = retrieveRelevantChunks(chunks, "binary tree", 2);
   assert.equal(results.length, 2);
 });
 
@@ -330,6 +344,23 @@ test("semantic retrieval rejects a high cosine score with only one weak term acr
   assert.deepEqual(results, []);
 });
 
+test("semantic retrieval rejects partial topic coverage despite high similarity", async () => {
+  const chunks = chunkText(
+    "A binary search tree has properties that support efficient key lookup.",
+    { chunkSize: 100, chunkOverlap: 0 },
+  );
+  const embedder = async (_texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY" ? [[1, 0]] : [[1, 0]];
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "Explain binary search tree properties and photosynthesis",
+    { embedder, model: "test-partial-topic-coverage-model" },
+  );
+
+  assert.deepEqual(results, []);
+});
+
 test("semantic retrieval keeps lexically corroborated passages at the existing cutoff", async () => {
   const chunks = chunkText(
     "A binary search tree stores keys for efficient lookup.",
@@ -345,7 +376,7 @@ test("semantic retrieval keeps lexically corroborated passages at the existing c
 
   const atCutoff = await retrieveSemanticallyRelevantChunks(
     chunks,
-    "Explain binary search trees",
+    "Explain binary search tree",
     {
       embedder: embedWithScore(0.35),
       model: "test-at-semantic-cutoff-model",
@@ -353,7 +384,7 @@ test("semantic retrieval keeps lexically corroborated passages at the existing c
   );
   const belowCutoff = await retrieveSemanticallyRelevantChunks(
     chunks,
-    "Explain binary search trees",
+    "Explain binary search tree",
     {
       embedder: embedWithScore(0.349),
       model: "test-below-semantic-cutoff-model",
