@@ -38,10 +38,7 @@ export function getLearningProgress(
     }
 
     const assessment = detectConfusion(turn.text, history);
-    if (
-      assessment.severity === "moderate" ||
-      assessment.severity === "high"
-    ) {
+    if (assessment.signals.some((signal) => signal !== "prior-difficulty")) {
       supportMoments += 1;
     }
     if (HINT_REQUEST.test(turn.text)) {
@@ -91,7 +88,7 @@ export function getLearningProgress(
     corrections,
     hints,
     supportMoments,
-    description: `${evidence.join(" · ")}. Based only on explicit cues in this conversation; not a mastery score.`,
+    description: `${evidence.join(" · ")}. Based on interaction evidence in this conversation; not a mastery score.`,
   };
 }
 

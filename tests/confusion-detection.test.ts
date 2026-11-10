@@ -75,6 +75,16 @@ test("an answer is not treated as a repeated mistake without corrective feedback
   assert.ok(!assessment.signals.includes("repeated-mistake"));
 });
 
+test("a hint is not treated as explicit tutor correction", () => {
+  const assessment = detectConfusion("The answer is 12.", [
+    { role: "student", text: "The answer is 12." },
+    { role: "hint", text: "Not quite. Review the multiplication step." },
+  ]);
+
+  assert.equal(assessment.severity, "none");
+  assert.ok(!assessment.signals.includes("repeated-mistake"));
+});
+
 test("prior difficulty carries into later questions in the same conversation", () => {
   const assessment = detectConfusion("What should I check next?", [
     { role: "student", text: "I don't understand this step." },

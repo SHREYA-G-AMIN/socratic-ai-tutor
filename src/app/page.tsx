@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DocumentPreview } from "@/components/DocumentPreview";
 import { MermaidDiagram } from "@/components/MermaidDiagram";
@@ -49,7 +49,10 @@ export default function Home() {
   const [retryHint, setRetryHint] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const documentSessionRef = useRef(0);
-  const learningProgress = getLearningProgress(messages);
+  const learningProgress = useMemo(
+    () => getLearningProgress(messages),
+    [messages],
+  );
 
   // Auto-scroll chat to latest message
   useEffect(() => {

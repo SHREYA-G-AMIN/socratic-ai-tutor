@@ -22,7 +22,7 @@ export interface ConfusionAssessment {
 const SIMPLIFICATION_REQUEST =
   /\b(simpler|more simply|in simpler terms|break (?:it|this|that) down|slow(?:er|ly| down)|more slowly|step by step|small(?:er)? steps|plain language)\b/i;
 const EXPLICIT_CONFUSION =
-  /\b(?:i(?:'m| am) (?:a bit |a little |slightly )?confused|i (?:do not|don't) understand|i (?:do not|don't) get it|i(?:'m| am) lost|i(?:'m| am) not following|i can't follow|still confused|this is confusing|this makes no sense|i don't see how)\b/i;
+  /\b(?:i(?:'m| am) (?:a bit |a little |slightly )?confused|i (?:still )?(?:do not|don't) understand|i (?:do not|don't) get it|i(?:'m| am) lost|i(?:'m| am) not following|i can't follow|still confused|this is confusing|this makes no sense|i don't see how)\b/i;
 const UNSUCCESSFUL_ATTEMPT =
   /\b(?:still (?:getting|got|have|don't|do not|can't|cannot)|tried (?:that|this)|didn't work|doesn't work|not working|wrong again|got it wrong|got the wrong answer|failed again)\b/i;
 const EXPLICIT_FRUSTRATION =
@@ -74,7 +74,7 @@ export function detectConfusion(
   if (repeatedQuestion) signals.push("repeated-question");
   if (repeatedMistake) signals.push("repeated-mistake");
   if (priorDifficultyTurns > 0) signals.push("prior-difficulty");
-  if (unsuccessfulAttempt || priorUnsuccessfulAttempts > 0) {
+  if (unsuccessfulAttempt) {
     signals.push("unsuccessful-attempt");
   }
   if (explicitFrustration) signals.push("explicit-frustration");
@@ -165,10 +165,11 @@ function isRepeatedMistake(
       continue;
     }
 
-    const feedback = history
-      .slice(index + 1)
-      .find((nextTurn) => nextTurn.role !== "student");
-    if (feedback && TUTOR_CORRECTION.test(feedback.text.trim())) {
+    const feedback = history[index + 1];
+    if (
+      feedback?.role === "tutor" &&
+      TUTOR_CORRECTION.test(feedback.text.trim())
+    ) {
       return true;
     }
   }

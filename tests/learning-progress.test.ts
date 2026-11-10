@@ -49,6 +49,17 @@ test("hint requests and confusion evidence are reflected without diagnosing stud
   assert.doesNotMatch(progress.description, /frustrated|diagnos/i);
 });
 
+test("mild requests for support count without counting carried context again", () => {
+  const progress = getLearningProgress([
+    { role: "tutor", text: "What does this step mean?" },
+    { role: "student", text: "I don't understand this step." },
+    { role: "tutor", text: "Let's use smaller steps." },
+    { role: "student", text: "What should I check next?" },
+  ]);
+
+  assert.equal(progress.supportMoments, 1);
+});
+
 test("answer wording alone does not count as understanding", () => {
   const progress = getLearningProgress([
     { role: "tutor", text: "Tell me about the BST." },

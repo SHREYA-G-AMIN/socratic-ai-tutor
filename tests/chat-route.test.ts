@@ -561,7 +561,7 @@ test("repeated corrected answers trigger a different high-support strategy", asy
     }, async () => {
       const response = await POST(
         makeRequest({
-          message: "The target goes to the right child.",
+          message: "The target is smaller; right child.",
           documentText:
             "If the target is smaller than the current node, continue to the left child. If the target is larger than the current node, continue to the right child.",
           history: [
@@ -569,7 +569,7 @@ test("repeated corrected answers trigger a different high-support strategy", asy
               role: "tutor",
               text: "What happens when the target is smaller than the current node?",
             },
-            { role: "student", text: "The target goes to the right child." },
+            { role: "student", text: "The target is smaller; right child." },
             {
               role: "tutor",
               text: "Not quite. The passage directs a smaller target to the left child.",
