@@ -114,8 +114,36 @@ test("keyword fallback keeps citations, explicit format, confusion adaptation, a
 
       assert.match(url, /:generateContent$/);
       geminiRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const evidence =
+        "Photosynthesis captures light energy and stores it as chemical energy in plants.";
       return makeTutorResponse(
-        "Photosynthesis captures light energy.\n\n```mermaid\nflowchart TD\n  Light --> ChemicalEnergy\n```",
+        `Photosynthesis captures light energy.\n\n\`\`\`diagram-json\n${JSON.stringify({
+          type: "flowchart",
+          direction: "TD",
+          nodes: [
+            {
+              id: "light",
+              label: "light energy",
+              sourceIndex: 1,
+              evidence,
+            },
+            {
+              id: "chemical",
+              label: "chemical energy",
+              sourceIndex: 1,
+              evidence,
+            },
+          ],
+          edges: [
+            {
+              from: "light",
+              to: "chemical",
+              label: "stores it as",
+              sourceIndex: 1,
+              evidence,
+            },
+          ],
+        })}\n\`\`\``,
       );
     }, async () => {
       const documentText =
@@ -142,7 +170,13 @@ test("keyword fallback keeps citations, explicit format, confusion adaptation, a
       assert.equal(body.retrievalMode, "keyword");
       assert.match(body.warning, /embedding provider/i);
       assert.equal(body.reply, "Photosynthesis captures light energy.");
-      assert.equal(body.diagram, "flowchart TD\n  Light --> ChemicalEnergy");
+      assert.match(body.diagram, /^flowchart TD/);
+      assert.equal(body.diagramData.type, "flowchart");
+      assert.equal(body.diagramData.nodes[0].sourceIndex, 1);
+      assert.equal(
+        body.diagramData.edges[0].evidence,
+        "Photosynthesis captures light energy and stores it as chemical energy in plants.",
+      );
       assert.equal(body.sources.length, 1);
       assert.equal(body.sources[0].fileName, "biology.pdf");
       assert.deepEqual(body.sources[0].pageNumbers, [3]);
@@ -663,7 +697,12 @@ test("a model-generated diagram is omitted when the student did not request one"
       }
 
       return makeTutorResponse(
-        "The passage describes plant cells.\n```mermaid\nflowchart TD\n  A --> B\n```",
+        `The passage describes plant cells.\n\`\`\`diagram-json\n${JSON.stringify({
+          type: "flowchart",
+          direction: "TD",
+          nodes: [],
+          edges: [],
+        })}\n\`\`\``,
       );
     }, async () => {
       const response = await POST(
@@ -677,6 +716,71 @@ test("a model-generated diagram is omitted when the student did not request one"
       assert.equal(body.diagram, undefined);
       assert.equal(body.reply, "The passage describes plant cells.");
       assert.equal(body.sources.length, 1);
+    });
+  });
+});
+
+test("an unsupported diagram claim is omitted while its answer and citations remain", async () => {
+  await withApiKey("test-key", async () => {
+    const passage =
+      "Photosynthesis captures light energy and stores it as chemical energy in plants.";
+    await withFetch(async (input, init) => {
+      const url = String(input);
+      if (url.includes("batchEmbedContents")) {
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<{ taskType: string }>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(() => ({ values: [1, 0] })),
+        });
+      }
+
+      const inventedPassage = "The sun produces oxygen.";
+      return makeTutorResponse(
+        `The source describes energy storage.\n\`\`\`diagram-json\n${JSON.stringify({
+          type: "flowchart",
+          direction: "TD",
+          nodes: [
+            {
+              id: "sun",
+              label: "sun",
+              sourceIndex: 1,
+              evidence: inventedPassage,
+            },
+            {
+              id: "oxygen",
+              label: "oxygen",
+              sourceIndex: 1,
+              evidence: inventedPassage,
+            },
+          ],
+          edges: [
+            {
+              from: "sun",
+              to: "oxygen",
+              label: "produces",
+              sourceIndex: 1,
+              evidence: inventedPassage,
+            },
+          ],
+        })}\n\`\`\``,
+      );
+    }, async () => {
+      const response = await POST(
+        makeRequest({
+          message:
+            "I don't understand; summarize the photosynthesis process and draw a flowchart",
+          documentText: passage,
+        }),
+      );
+
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.diagram, undefined);
+      assert.equal(body.diagramData, undefined);
+      assert.match(body.reply, /diagram could not be validated/i);
+      assert.equal(body.sources.length, 1);
+      assert.equal(body.sources[0].text.includes("Photosynthesis"), true);
     });
   });
 });

@@ -192,6 +192,8 @@ export async function POST(request: Request) {
     );
     const tutorResponse = parseTutorResponse(generatedResponse, {
       allowDiagram: diagramRequest !== "none" && sources.length > 0,
+      requireDiagram: diagramRequest === "required",
+      sourcePassages: sources.map((source) => source.text),
     });
 
     return NextResponse.json({
