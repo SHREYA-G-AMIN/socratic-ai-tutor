@@ -139,9 +139,12 @@ export function retrieveRelevantChunks(
   // Two distinct topic terms prevent one incidental token from creating a citation.
   // A one-term query can still be searched with that single available signal.
   const minimumMatches =
-    options.minimumMatches ?? Math.min(2, keywords.length);
+    options.minimumMatches ?? Math.max(1, Math.min(2, keywords.length));
 
-  if (chunks.length === 0 || (keywords.length === 0 && minimumMatches > 0)) {
+  if (
+    chunks.length === 0 ||
+    (keywords.length === 0 && options.minimumMatches !== 0)
+  ) {
     return [];
   }
 
@@ -179,6 +182,16 @@ export async function retrieveSemanticallyRelevantChunks(
     return [];
   }
 
+  const queryTerms = getContentQueryTerms(message);
+  const requireLexicalCorroboration =
+    options.requireLexicalCorroboration ?? true;
+  const minimumContentMatches =
+    options.minimumContentMatches ?? Math.min(2, queryTerms.length);
+
+  if (requireLexicalCorroboration && queryTerms.length === 0) {
+    return [];
+  }
+
   const embedder = options.embedder ?? generateEmbeddings;
   const model =
     options.model ??
@@ -204,11 +217,6 @@ export async function retrieveSemanticallyRelevantChunks(
     throw new Error("The embedding provider returned no query embedding.");
   }
 
-  const queryTerms = getContentQueryTerms(message);
-  const requireLexicalCorroboration =
-    options.requireLexicalCorroboration ?? true;
-  const minimumContentMatches =
-    options.minimumContentMatches ?? Math.min(2, queryTerms.length);
   // Keep the established cosine cutoff, but do not cite a high-scoring passage
   // unless it also matches the question's available content terms.
   const results = chunks
@@ -232,14 +240,30 @@ export async function retrieveSemanticallyRelevantChunks(
       (result) =>
         result.score >= MINIMUM_SEMANTIC_SIMILARITY &&
         (!requireLexicalCorroboration ||
-          queryTerms.length === 0 ||
-          queryTerms.filter((term) => result.contentTerms.has(term)).length >=
-            minimumContentMatches),
+          queryTerms.some((term) => result.contentTerms.has(term))),
     )
-    .map(({ contentTerms: _contentTerms, ...result }) => result)
     .sort((left, right) => right.score - left.score || left.index - right.index);
 
-  return results.slice(0, options.maxResults ?? 3);
+  const selected = results.slice(0, options.maxResults ?? 3);
+  if (
+    requireLexicalCorroboration &&
+    new Set(
+      selected.flatMap((result) =>
+        queryTerms.filter((term) => result.contentTerms.has(term)),
+      ),
+    ).size < minimumContentMatches
+  ) {
+    return [];
+  }
+
+  return selected.map((result) => ({
+    chunk: result.chunk,
+    score: result.score,
+    index: result.index,
+    start: result.start,
+    end: result.end,
+    pageNumbers: result.pageNumbers,
+  }));
 }
 
 function getContentQueryTerms(text: string): string[] {

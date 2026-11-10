@@ -82,7 +82,7 @@ test("retrieveRelevantChunks returns matches sorted by score", () => {
 
 test("retrieveRelevantChunks rejects a weak one-term match for a multi-term question", () => {
   const chunks = makeChunks([
-    "A binary tree is discussed, but recursion and algorithms are absent.",
+    "This note mentions a binary tree.",
     "The weather is nice today.",
   ]);
 
@@ -92,6 +92,15 @@ test("retrieveRelevantChunks rejects a weak one-term match for a multi-term ques
   );
 
   assert.deepEqual(results, []);
+});
+
+test("retrieveRelevantChunks does not treat a question without topic terms as a summary", () => {
+  const chunks = makeChunks([
+    "A binary search tree stores keys for efficient lookup.",
+    "Photosynthesis converts light energy into chemical energy.",
+  ]);
+
+  assert.deepEqual(retrieveRelevantChunks(chunks, "What is it?"), []);
 });
 
 test("retrieveRelevantChunks accepts content-term corroboration for relevant questions", () => {
@@ -302,6 +311,25 @@ test("semantic retrieval rejects a high cosine score without content-term corrob
   assert.deepEqual(results, []);
 });
 
+test("semantic retrieval rejects a high cosine score with only one weak term across passages", async () => {
+  const chunks = chunkText(
+    "A binary tree is mentioned, but this note covers data structures.",
+    { chunkSize: 100, chunkOverlap: 0 },
+  );
+  const embedder = async (_texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY"
+      ? [[1, 0]]
+      : [[0.55, Math.sqrt(1 - 0.55 ** 2)]];
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "Explain binary recursion algorithms",
+    { embedder, model: "test-weak-semantic-corroboration-model" },
+  );
+
+  assert.deepEqual(results, []);
+});
+
 test("semantic retrieval keeps lexically corroborated passages at the existing cutoff", async () => {
   const chunks = chunkText(
     "A binary search tree stores keys for efficient lookup.",
@@ -356,6 +384,29 @@ test("document-wide summaries can use semantic passages without query-term overl
   );
 
   assert.equal(results.length, 1);
+});
+
+test("semantic retrieval declines questions without topic terms", async () => {
+  const chunks = chunkText(
+    "A binary search tree stores keys for efficient lookup.",
+    { chunkSize: 100, chunkOverlap: 0 },
+  );
+  let embeddingCalls = 0;
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "What is it?",
+    {
+      embedder: async () => {
+        embeddingCalls++;
+        return [[1, 0]];
+      },
+      model: "test-no-topic-terms-model",
+    },
+  );
+
+  assert.deepEqual(results, []);
+  assert.equal(embeddingCalls, 0);
 });
 
 test("semantic retrieval leaves page numbers empty when source metadata is missing", async () => {

@@ -228,7 +228,7 @@ test("weak keyword fallback match declines without Gemini or citations", async (
       const response = await POST(
         makeRequest({
           message: "Explain binary recursion algorithms",
-          documentText: "This note mentions a binary tree, but says nothing about recursion or algorithms.",
+          documentText: "This note mentions a binary tree.",
         }),
       );
 

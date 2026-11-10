@@ -60,7 +60,7 @@ test("adaptive direct-answer instructions preserve an explicit summary request",
   const instructions = getTutorInstructions("summary", "moderate");
 
   assert.match(instructions, /structured summary/i);
-  assert.match(instructions, /break the concept into smaller ordered steps/i);
+  assert.match(instructions, /break the supported concept into smaller ordered steps/i);
   assert.match(instructions, /keep the requested format/i);
   assert.match(instructions, /only.*retrieved document passages/i);
   assert.match(instructions, /do not ask a follow-up question/i);
@@ -69,7 +69,7 @@ test("adaptive direct-answer instructions preserve an explicit summary request",
 test("adaptive instructions support the requested explanation without Socratic redirection", () => {
   const instructions = getTutorInstructions("direct", "high");
 
-  assert.match(instructions, /explain prerequisite concepts first/i);
+  assert.match(instructions, /explain a prerequisite only if the retrieved passages establish it/i);
   assert.match(instructions, /supportive tone/i);
   assert.match(instructions, /do not turn the response into a hint or Socratic question/i);
   assert.match(instructions, /keep the requested format/i);
@@ -101,6 +101,15 @@ test("adaptive explanations acknowledge missing evidence and forbid invented pre
   assert.match(highInstructions, /explain a prerequisite only if the retrieved passages establish it/i);
   assert.match(highInstructions, /acknowledge that limitation/i);
   assert.match(highInstructions, /do not turn the response into a hint or Socratic question/i);
+});
+
+test("strict grounding limits course-specific claims to evidence in retrieved passages", () => {
+  const instructions = getTutorInstructions("direct");
+
+  assert.match(instructions, /use only the retrieved document passages.*course-specific claims/i);
+  assert.match(instructions, /do not use prior knowledge to add facts/i);
+  assert.match(instructions, /uploaded material does not explain it/i);
+  assert.match(instructions, /cannot find the information in the uploaded material/i);
 });
 
 test("mild confusion adapts Socratic guidance with simpler wording and a small hint", () => {
