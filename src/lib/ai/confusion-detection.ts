@@ -135,8 +135,8 @@ function isRepeatedQuestion(
     return false;
   }
 
-  return recentStudentMessages.some(
-    (priorMessage) => normalizeQuestion(priorMessage) === normalizedMessage,
+  return recentStudentMessages.some((priorMessage) =>
+    areSimilarMessages(message, priorMessage, 2),
   );
 }
 
@@ -160,7 +160,7 @@ function isRepeatedMistake(
     if (
       turn.role !== "student" ||
       !recentStudentIndexSet.has(index) ||
-      normalizeQuestion(turn.text) !== normalizedMessage
+      !areSimilarMessages(turn.text, message, 3)
     ) {
       continue;
     }
@@ -183,4 +183,67 @@ function normalizeQuestion(message: string): string {
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+
+const QUESTION_STOP_WORDS = new Set([
+  "about", "after", "again", "also", "are", "does", "how", "that",
+  "the", "their", "then", "there", "these", "this", "those", "what",
+  "when", "where", "which", "while", "who", "why", "with", "would",
+  "you", "your", "can", "could", "should", "would", "please",
+]);
+
+const QUESTION_ALIASES = new Map<string, string>([
+  ["happen", "occur"],
+  ["happens", "occur"],
+  ["happened", "occur"],
+  ["occurs", "occur"],
+  ["occurring", "occur"],
+  ["need", "require"],
+  ["needs", "require"],
+  ["needed", "require"],
+  ["requires", "require"],
+  ["required", "require"],
+  ["requiring", "require"],
+  ["begin", "start"],
+  ["begins", "start"],
+  ["began", "start"],
+  ["starting", "start"],
+]);
+
+function areSimilarMessages(
+  left: string,
+  right: string,
+  minimumTerms: number,
+): boolean {
+  if (normalizeQuestion(left) === normalizeQuestion(right)) {
+    return true;
+  }
+
+  const leftTerms = getComparableTerms(left);
+  const rightTerms = getComparableTerms(right);
+  if (
+    leftTerms.size < minimumTerms ||
+    rightTerms.size < minimumTerms
+  ) {
+    return false;
+  }
+
+  let sharedTerms = 0;
+  for (const term of leftTerms) {
+    if (rightTerms.has(term)) sharedTerms += 1;
+  }
+
+  // Overlap coefficient is intentionally conservative: one short common
+  // phrase should not make unrelated questions look like repetitions.
+  return sharedTerms / Math.min(leftTerms.size, rightTerms.size) >= 0.8;
+}
+
+function getComparableTerms(message: string): Set<string> {
+  return new Set(
+    normalizeQuestion(message)
+      .split(" ")
+      .filter((term) => term.length > 2 && !QUESTION_STOP_WORDS.has(term))
+      .map((term) => QUESTION_ALIASES.get(term) ?? term),
+  );
 }
