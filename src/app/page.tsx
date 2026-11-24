@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { DocumentPreview } from "@/components/DocumentPreview";
 import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { PdfUploader } from "@/components/PdfUploader";
+import { TutorMessage } from "@/components/TutorMessage";
 import { getLearningProgress } from "@/lib/ai/learning-progress";
 import type { ChatResponse, ChatSourceReference } from "@/types/chat";
 import type { DiagramData } from "@/lib/ai/visual-explanations";
@@ -389,7 +390,7 @@ export default function Home() {
                         : "bg-surface-elevated border-border text-accent-primary"
                     }`}
                   >
-                    {msg.role === "hint" ? "H" : "S"}
+                    {msg.role === "hint" ? "H" : "T"}
                   </div>
                 )}
 
@@ -402,7 +403,7 @@ export default function Home() {
                       : "bg-hint-bg border border-hint-border text-hint-text rounded-tl-xs"
                   }`}
                 >
-                  <p>{msg.text}</p>
+                  {msg.role === "student" ? <p>{msg.text}</p> : <TutorMessage content={msg.text} />}
                   {(msg.diagramData || msg.diagram) && (
                     <MermaidDiagram
                       data={msg.diagramData}
