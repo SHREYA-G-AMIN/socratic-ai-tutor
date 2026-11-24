@@ -43,6 +43,8 @@ export interface DocumentUploadSuccessData {
   pageRanges: DocumentPageRange[];
   /** True when the extracted text was longer than the response limit. */
   truncated: boolean;
+  /** True when text was recovered from scanned page images. */
+  ocrUsed?: boolean;
 }
 
 export interface DocumentUploadSuccessResponse {
