@@ -360,7 +360,7 @@ export async function renderMermaidSafely(
 
 function normalizeInlineDiagramJson(response: string): string {
   return response.replace(/`([^`]+)`/g, (inlineCode, content: string) => {
-    const candidate = content.trim().replace(/^json\\s*/i, "");
+    const candidate = content.trim().replace(/^json\s*/i, "");
     if (!candidate.startsWith("{")) return inlineCode;
 
     try {
@@ -373,9 +373,7 @@ function normalizeInlineDiagramJson(response: string): string {
       ) {
         return inlineCode;
       }
-      return ````diagram-json
-${candidate}
-````;
+      return "```diagram-json\n" + candidate + "\n```";
     } catch {
       return inlineCode;
     }
