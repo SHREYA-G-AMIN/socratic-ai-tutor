@@ -195,8 +195,8 @@ export async function POST(request: Request) {
     const baseInstructions = getTutorInstructions(
       intent,
       confusion.severity,
-      diagramRequest,
-      sources.length > 0 || generalDiagramRequest,
+      generalDiagramRequest ? "none" : diagramRequest,
+      true,
     );
     const tutorInstructions = generalDiagramRequest
       ? `${baseInstructions}
