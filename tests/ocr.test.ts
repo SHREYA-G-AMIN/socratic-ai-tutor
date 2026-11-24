@@ -65,3 +65,32 @@ test("OCR reports a clear configuration error when the Gemini key is missing", a
     else process.env.GEMINI_API_KEY = previousKey;
   }
 });
+
+test("OCR rejects responses that omit a requested scanned page", async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = "test-key";
+  try {
+    await assert.rejects(
+      recognizeScannedPdf(
+        new Uint8Array([37, 80, 68, 70]),
+        2,
+        async () => Response.json({
+          candidates: [{
+            content: {
+              parts: [{
+                text: JSON.stringify({
+                  pages: [{ pageNumber: 1, text: "Only the first page." }],
+                }),
+              }],
+            },
+          }],
+        }),
+        [1, 2],
+      ),
+      /unreadable page data/,
+    );
+  } finally {
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+  }
+});
