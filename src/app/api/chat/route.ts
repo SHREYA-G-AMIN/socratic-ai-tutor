@@ -68,6 +68,7 @@ export async function POST(request: Request) {
     const currentMessage = message.trim();
     const intent = detectTutoringIntent(currentMessage);
     const history = parseChatHistory(body.history);
+    const generalDiagramRequest = isGeneralDiagramRequest(currentMessage, history);
     const retrievalMessage = buildRetrievalMessage(currentMessage, history);
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -151,7 +152,7 @@ export async function POST(request: Request) {
       score: result.score,
     }));
 
-    if (sources.length === 0) {
+    if (sources.length === 0 && !generalDiagramRequest) {
       return NextResponse.json({
         reply:
           "I couldn't find supporting information for that question in the uploaded material.",
@@ -162,15 +163,17 @@ export async function POST(request: Request) {
     }
 
     const contextText =
-      sources
-        .map((source, index) => {
-          const location =
-            source.pageNumbers.length > 0
-              ? `Pages ${source.pageNumbers.join(", ")}`
-              : `Text offsets ${source.startChar}-${source.endChar}`;
-          return `Passage ${index + 1} (${location}):\n${source.text}`;
-        })
-        .join("\n\n");
+      sources.length > 0
+        ? sources
+            .map((source, index) => {
+              const location =
+                source.pageNumbers.length > 0
+                  ? `Pages ${source.pageNumbers.join(", ")}`
+                  : `Text offsets ${source.startChar}-${source.endChar}`;
+              return `Passage ${index + 1} (${location}):\n${source.text}`;
+            })
+            .join("\n\n")
+        : "No uploaded-document passages were retrieved. The student explicitly requested a general-knowledge diagram.";
     const prompt = `Context Passages:\n${contextText}\n\nUser Question: ${currentMessage}`;
 
     const contents = [...history, { role: "user" as const, parts: [{ text: prompt }] }];
@@ -186,14 +189,26 @@ export async function POST(request: Request) {
       })),
     );
     const diagramRequest = getDiagramRequest(currentMessage);
+    const baseInstructions = getTutorInstructions(
+      intent,
+      confusion.severity,
+      diagramRequest,
+      sources.length > 0,
+    );
+    const tutorInstructions = generalDiagramRequest
+      ? `${baseInstructions}
+
+GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The student explicitly asked for a general diagram rather than one limited to the uploaded document. This overrides the document-only restriction for the diagram only. Use reliable general knowledge to draw a simple, accurate diagram of the topic established by the recent conversation. Do not pretend its content came from the PDF, do not add document citations, and clearly label it as a general explanation. Return the required diagram-json block using the normal schema. Keep any prose brief.`
+      : baseInstructions;
     const generatedResponse = await generateTutorReply(
       apiKey,
       contents,
-      getTutorInstructions(intent, confusion.severity, diagramRequest, sources.length > 0),
+      tutorInstructions,
     );
     const tutorResponse = parseTutorResponse(generatedResponse, {
-      allowDiagram: diagramRequest !== "none" && sources.length > 0,
+      allowDiagram: generalDiagramRequest || (diagramRequest !== "none" && sources.length > 0),
       requireDiagram: diagramRequest === "required",
+      allowUngroundedDiagram: generalDiagramRequest,
       sourcePassages: sources.map((source) => source.text),
     });
 
@@ -335,6 +350,19 @@ async function generateTutorReply(
   }
 
   return reply;
+}
+
+
+function isGeneralDiagramRequest(
+  message: string,
+  history: GeminiHistoryMessage[],
+): boolean {
+  const explicitlyGeneral =
+    /\b(?:general|in general|outside (?:the )?(?:document|pdf|material)|not (?:from|based on) (?:the )?(?:document|pdf|material)|use (?:your )?(?:general )?knowledge)\b/i.test(
+      message,
+    );
+  const asksForDiagram = /\b(?:diagram|draw|visual|flowchart|concept map)\b/i.test(message);
+  return explicitlyGeneral && asksForDiagram && history.length > 0;
 }
 
 function parsePageRanges(
