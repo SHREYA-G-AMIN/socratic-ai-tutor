@@ -44,6 +44,7 @@ export async function POST(request: Request): Promise<Response> {
         pageRanges: extraction.pageRanges,
         truncated: extraction.truncated,
         ocrUsed: extraction.ocrUsed ?? false,
+        ...(extraction.ocrProvider ? { ocrProvider: extraction.ocrProvider } : {}),
       },
     };
 
@@ -85,7 +86,7 @@ export function GET(): Response {
       maxFileSizeBytes: MAX_UPLOAD_SIZE_BYTES,
       maxPages: MAX_PDF_PAGES,
       description:
-        "Upload a single PDF. Returns extracted text and page ranges; scanned PDFs use Gemini OCR.",
+        "Upload a single PDF. Returns extracted text and page ranges; scanned PDFs use Gemini OCR with a local Tesseract fallback.",
     },
   });
 }
