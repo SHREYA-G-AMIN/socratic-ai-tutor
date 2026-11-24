@@ -60,20 +60,34 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtraction> 
       );
     }
 
-    const { text, pageRanges, truncated } = joinPageText(pageTexts);
+    const pagesNeedingOcr = pageTexts
+      .map((pageText, index) => normalizeText(pageText) ? null : index + 1)
+      .filter((pageNumber): pageNumber is number => pageNumber !== null);
 
-    if (text.length === 0) {
-      const ocr = await recognizeScannedPdf(bytes, pageCount);
+    if (pagesNeedingOcr.length > 0) {
+      const ocr = await recognizeScannedPdf(bytes, pageCount, fetch, pagesNeedingOcr);
+      const combined = joinPageText(
+        pageTexts.map((pageText, index) =>
+          normalizeText(pageText) || ocr.pageTexts[index] || "",
+        ),
+      );
+      if (!combined.text) {
+        throw new DocumentProcessingError(
+          "NO_TEXT_CONTENT",
+          "No readable text could be recognized in this PDF.",
+        );
+      }
       return {
-        text: ocr.text,
-        characterCount: ocr.text.length,
-        pageRanges: ocr.pageRanges,
+        text: combined.text,
+        characterCount: combined.text.length,
+        pageRanges: combined.pageRanges,
         pageCount,
-        truncated: ocr.truncated,
+        truncated: combined.truncated || ocr.truncated,
         ocrUsed: true,
       };
     }
 
+    const { text, pageRanges, truncated } = joinPageText(pageTexts);
     return {
       text,
       characterCount: text.length,
