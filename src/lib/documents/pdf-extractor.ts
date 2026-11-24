@@ -10,6 +10,7 @@ import {
 } from "./constants";
 import { DocumentProcessingError } from "./errors";
 import { recognizeScannedPdf } from "./ocr";
+import { recognizeScannedPdfLocally } from "./local-ocr";
 import type { DocumentPageRange } from "@/types/document";
 
 export interface PdfExtraction {
@@ -24,6 +25,7 @@ export interface PdfExtraction {
   /** True when the extracted text was cut off at the response limit. */
   truncated: boolean;
   ocrUsed?: boolean;
+  ocrProvider?: "gemini" | "tesseract";
 }
 
 /**
@@ -69,7 +71,18 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtraction> 
       .filter((pageNumber): pageNumber is number => pageNumber !== null);
 
     if (pagesNeedingOcr.length > 0) {
-      const ocr = await recognizeScannedPdf(ocrBytes, pageCount, fetch, pagesNeedingOcr);
+      let ocr: Awaited<ReturnType<typeof recognizeScannedPdf>>;
+      let ocrProvider: "gemini" | "tesseract" = "gemini";
+      try {
+        ocr = await recognizeScannedPdf(ocrBytes, pageCount, fetch, pagesNeedingOcr);
+      } catch (error) {
+        console.warn("[documents/ocr] Gemini OCR failed; falling back to local Tesseract", {
+          reason: error instanceof Error ? error.message.slice(0, 300) : "unknown",
+          pages: pagesNeedingOcr.length,
+        });
+        ocr = await recognizeScannedPdfLocally(document, pageCount, pagesNeedingOcr);
+        ocrProvider = "tesseract";
+      }
       const combined = joinPageText(
         pageTexts.map((pageText, index) =>
           normalizeText(pageText) || ocr.pageTexts[index] || "",
@@ -88,6 +101,7 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtraction> 
         pageCount,
         truncated: combined.truncated || ocr.truncated,
         ocrUsed: true,
+        ocrProvider,
       };
     }
 
