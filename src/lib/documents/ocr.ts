@@ -116,6 +116,11 @@ export async function recognizeScannedPdf(
         pageNumbers.includes((page as OcrPage).pageNumber) &&
         typeof (page as OcrPage).text === "string")
       .sort((left, right) => left.pageNumber - right.pageNumber);
+
+    const returnedPages = new Set(pages.map((page) => page.pageNumber));
+    if (pageNumbers.some((pageNumber) => !returnedPages.has(pageNumber))) {
+      throw new Error("OCR response omitted one or more requested pages");
+    }
   } catch {
     throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned unreadable page data.");
   }
