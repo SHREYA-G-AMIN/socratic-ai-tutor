@@ -63,6 +63,39 @@ test("OCR extracts only requested scanned pages and preserves page numbers", asy
   }
 });
 
+test("OCR retries one transient Gemini 503 and succeeds when capacity returns", async () => {
+  setTestKey();
+  let calls = 0;
+  try {
+    const result = await recognizeScannedPdf(
+      new Uint8Array([37, 80, 68, 70]),
+      1,
+      async () => {
+        calls += 1;
+        if (calls === 1) {
+          return Response.json(
+            { error: { message: "Model is experiencing high demand" } },
+            { status: 503 },
+          );
+        }
+        return Response.json({
+          candidates: [{
+            content: {
+              parts: [{ text: '{"pages":[{"pageNumber":1,"text":"Recovered after retry."}]}' }],
+            },
+          }],
+        });
+      },
+    );
+
+    assert.equal(calls, 2);
+    assert.equal(result.text, "Recovered after retry.");
+  } finally {
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+  }
+});
+
 test("OCR accepts a model configured with the models/ prefix", async () => {
   setTestKey();
   const previousModel = process.env.GEMINI_OCR_MODEL;
