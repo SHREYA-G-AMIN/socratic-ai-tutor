@@ -194,7 +194,18 @@ export function validateGeneralDiagram(value: unknown): DiagramData | null {
     }),
     edges: value.edges.map((edge) => {
       if (!isRecord(edge) || !hasExactKeys(edge, ["from", "to", "label"])) return null;
-      return { ...edge, sourceIndex: 1, evidence: String(edge.label ?? "") };
+      const from = value.nodes.find(
+        (node) => isRecord(node) && node.id === edge.from,
+      );
+      const to = value.nodes.find(
+        (node) => isRecord(node) && node.id === edge.to,
+      );
+      if (!isRecord(from) || !isRecord(to)) return null;
+      return {
+        ...edge,
+        sourceIndex: 1,
+        evidence: `${String(from.label)} ${String(edge.label)} ${String(to.label)}`,
+      };
     }),
   };
   if (normalized.nodes.some((node) => node === null) || normalized.edges.some((edge) => edge === null)) return null;
