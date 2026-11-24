@@ -1,6 +1,6 @@
 # Development Tasks — Socratic AI Tutor
 
-**Status basis:** Repository integration audit, 2026-11-09.
+**Status basis:** Repository readiness audit, 2026-11-24.
 
 Status definitions: **Complete** means implemented and covered by automated or
 manual verification; **Partial** means implementation exists but validation or
@@ -21,6 +21,7 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 ## Milestone 2 — Gemini Socratic Tutoring and Adaptation
 
 - [Complete] Integrate Gemini through the existing chat API, preserving conversation history and the response contract.
+- [Complete] Bound provider conversation context to the latest 12 valid turns and test that older turns are excluded.
 - [Complete] Detect explicit summary, explanation, definition, comparison, and list requests; preserve direct intent over Socratic prompting.
 - [Complete] Preserve Socratic guidance for ordinary learning questions.
 - [Complete] Detect confusion evidence from interaction cues, repeated questions, answers repeated after explicit correction, unsuccessful attempts, and frustration statements in recent student turns.
@@ -47,9 +48,11 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 - [Complete] Cover above-cutoff but lexically uncorroborated similarity, the existing cutoff boundary, summary retrieval, and adaptive evidence constraints.
 - [Complete] Cover missing/multiple files, empty files, and invalid PDF signatures with upload-validation tests.
 - [Complete] Run the PDF upload endpoint smoke test against a live local server; confirmed HTTP 200, two pages, and extracted text.
-- [Complete] Run targeted confusion, adaptive prompt, and learning-progress tests, plus full-suite, TypeScript, lint, and production-build validation for the Part 2 implementation.
+- [Complete] Maintain targeted tests for confusion, adaptive prompts, learning progress, retrieval, citations, diagram validation, and API behavior.
+- [Partial] Run the current full-suite, TypeScript, lint, and production-build checks in automated CI; the new workflow must complete successfully before release readiness is confirmed.
 - [Complete] Reconcile README, architecture documentation, and this checklist with current implementation.
 - [Not started] Deploy the application or validate a deployed environment.
+- [Complete] Add GitHub Actions CI for install, tests, TypeScript, lint, and production build.
 
 ## Current Limits
 
