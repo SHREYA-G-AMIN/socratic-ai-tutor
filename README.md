@@ -15,7 +15,7 @@ Socratic AI Tutor aims to provide a more personalized learning experience throug
 ## Key Features
 
 ### 1. Document-Grounded Tutoring
-- Upload PDFs (up to 10 MB and 500 pages), including scanned PDFs using Gemini OCR.
+- Upload PDFs (up to 10 MB and 500 pages), including scanned PDFs using Gemini OCR with a local Tesseract fallback when Gemini is unavailable.
 - Retrieve semantically relevant passages, with a keyword fallback if embeddings fail.
 - Return passage citations with filename and page numbers when available, otherwise text offsets.
 - Decline to answer when retrieval finds no supporting passages.
@@ -42,7 +42,7 @@ Socratic AI Tutor aims to provide a more personalized learning experience throug
 | Frontend | Next.js 16, React 19, TypeScript | Web app and chat UI |
 | Styling | Tailwind CSS 4 and theme tokens | Responsive light/dark styling |
 | Tutor and embeddings | Gemini `gemini-3.5-flash-lite`, `gemini-embedding-001` | One chat generation call and semantic retrieval |
-| PDF processing | `unpdf` + Gemini PDF vision | Text extraction, page-aware OCR for scanned pages |
+| PDF processing | `unpdf`, Gemini PDF vision, Tesseract.js, `@napi-rs/canvas` | Text extraction, page-aware cloud OCR with local OCR fallback |
 | Retrieval | Gemini embeddings, Supabase-backed durable vector cache, cosine similarity, keyword fallback | Reuse document vectors across restarts and instances |
 | Diagrams | Mermaid 12 | Render optional, passage-grounded diagrams |
 
@@ -52,7 +52,7 @@ model can be overridden with `GEMINI_EMBEDDING_MODEL`.
 
 ## System Workflow
 
-1. The upload route validates a PDF, extracts text and page ranges, and uses Gemini PDF OCR for pages without a text layer.
+1. The upload route validates a PDF, extracts text and page ranges, and tries Gemini PDF OCR for pages without a text layer and falls back to locally executed Tesseract OCR if Gemini fails. The first local OCR run downloads the English language data; subsequent runs can use Tesseract's cache.
 2. The chat route chunks the extracted text and retrieves passages using Gemini embeddings. Question-focused semantic matches must meet the existing cosine cutoff and corroborate up to two distinct content terms from the question (one when that is all the question provides); document-wide summary requests do not require term overlap. On embedding failure, keyword matching applies the same topic-term rule.
 3. If no passages are found, the route returns a fixed no-evidence response without calling Gemini.
 4. Otherwise, it sends retrieved passages, intent/adaptation instructions, and the existing conversation history to Gemini once.
@@ -111,5 +111,5 @@ socratic-ai-tutor/
 - Question-focused retrieval requires matching up to two distinct content terms, so relevant passages expressed only with synonyms or abbreviations may be declined. Document-wide summaries are exempt from the overlap check.
 - Gemini grounding and diagram correctness are instructed and no-evidence outputs are suppressed, but supported prose is not deterministically fact-checked.
 - Durable vector reuse requires the Supabase migration and server-side environment variables; without them, the app falls back to its bounded in-process cache.
-- Chat history is still session-scoped and is not persisted. OCR and vector persistence depend on the configured Gemini and Supabase services.
+- Chat history is still session-scoped and is not persisted. Gemini OCR is the primary scanned-page provider; if it is unavailable, local Tesseract OCR requires an initial network download of its English language data. Vector persistence still depends on Supabase.
 - Automated route tests mock Gemini and embeddings; they do not measure live-model answer quality.
