@@ -271,6 +271,7 @@ export function parseTutorResponse(
   } = {},
 ): ParsedTutorResponse {
   const allowDiagram = options.allowDiagram ?? true;
+  response = normalizeInlineDiagramJson(response);
   let diagramData: DiagramData | undefined;
   let diagramAttempted = false;
   let invalidDiagram = false;
@@ -355,6 +356,30 @@ export async function renderMermaidSafely(
   } catch {
     return { kind: "fallback", source };
   }
+}
+
+function normalizeInlineDiagramJson(response: string): string {
+  return response.replace(/`([^`]+)`/g, (inlineCode, content: string) => {
+    const candidate = content.trim().replace(/^json\\s*/i, "");
+    if (!candidate.startsWith("{")) return inlineCode;
+
+    try {
+      const parsed: unknown = JSON.parse(candidate);
+      if (
+        !isRecord(parsed) ||
+        !["type", "direction", "nodes", "edges"].every((key) =>
+          Object.hasOwn(parsed, key),
+        )
+      ) {
+        return inlineCode;
+      }
+      return ````diagram-json
+${candidate}
+````;
+    } catch {
+      return inlineCode;
+    }
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
