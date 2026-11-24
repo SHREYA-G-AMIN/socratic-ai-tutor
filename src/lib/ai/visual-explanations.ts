@@ -191,11 +191,22 @@ export function validateGeneralDiagram(value: unknown): DiagramData | null {
     type: value.type,
     direction: value.direction,
     nodes: rawNodes.map((node) => {
-      if (!isRecord(node) || !hasExactKeys(node, ["id", "label"])) return null;
-      return { ...node, sourceIndex: 1, evidence: String(node.label ?? "") };
+      if (
+        !isRecord(node) ||
+        !hasOnlyKeys(node, ["id", "label", "sourceIndex", "evidence"]) ||
+        typeof node.id !== "string" ||
+        typeof node.label !== "string"
+      ) return null;
+      return { id: node.id, label: node.label, sourceIndex: 1, evidence: node.label };
     }),
     edges: rawEdges.map((edge) => {
-      if (!isRecord(edge) || !hasExactKeys(edge, ["from", "to", "label"])) return null;
+      if (
+        !isRecord(edge) ||
+        !hasOnlyKeys(edge, ["from", "to", "label", "sourceIndex", "evidence"]) ||
+        typeof edge.from !== "string" ||
+        typeof edge.to !== "string" ||
+        typeof edge.label !== "string"
+      ) return null;
       const from = rawNodes.find(
         (node: unknown) => isRecord(node) && node.id === edge.from,
       );
@@ -384,6 +395,13 @@ function normalizeInlineDiagramJson(response: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowedKeys: string[],
+): boolean {
+  return Object.keys(value).every((key) => allowedKeys.includes(key));
 }
 
 function hasExactKeys(
