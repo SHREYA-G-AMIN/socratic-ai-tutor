@@ -5,6 +5,7 @@ import { DocumentProcessingError } from "./errors";
 import type { DocumentPageRange } from "@/types/document";
 
 const MAX_OCR_CHARACTERS = 500_000;
+const MAX_LOCAL_OCR_PAGES = 20;
 
 /** Rasterizes selected PDF pages in memory and recognizes them with local Tesseract. */
 export async function recognizeScannedPdfLocally(
@@ -16,6 +17,10 @@ export async function recognizeScannedPdfLocally(
     (n) => !Number.isInteger(n) || n < 1 || n > pageCount,
   )) {
     throw new DocumentProcessingError("OCR_FAILED", "The scanned PDF page selection is invalid.");
+  }
+
+  if (pageNumbers.length > MAX_LOCAL_OCR_PAGES) {
+    throw new DocumentProcessingError("OCR_FAILED", "Gemini is unavailable and local OCR is limited to 20 scanned pages per upload. Split the PDF into smaller files and try again.");
   }
 
   let worker: Awaited<ReturnType<typeof createWorker>> | undefined;
