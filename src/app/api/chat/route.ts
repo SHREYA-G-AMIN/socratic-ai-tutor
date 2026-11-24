@@ -26,6 +26,7 @@ import type { ChatResponse, ChatSourceReference } from "@/types/chat";
 
 const MAX_RETRIEVED_CHUNKS = 3;
 const MAX_MESSAGE_LENGTH = 2_000;
+const MAX_HISTORY_TURNS = 12;
 const CHUNK_SIZE = 500;
 const CHUNK_OVERLAP = 100;
 const GEMINI_CHAT_MODEL = "gemini-3.5-flash-lite";
@@ -260,6 +261,7 @@ function parseChatHistory(value: unknown): GeminiHistoryMessage[] {
           message.role === "tutor" ||
           message.role === "hint"),
     )
+    .slice(-MAX_HISTORY_TURNS)
     .map((message): GeminiHistoryMessage => {
       const role: GeminiHistoryMessage["role"] =
         message.role === "student" ? "user" : "model";
