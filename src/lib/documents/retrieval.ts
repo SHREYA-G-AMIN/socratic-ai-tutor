@@ -11,6 +11,7 @@ import {
 } from "./embeddings";
 
 const MINIMUM_SEMANTIC_SIMILARITY = 0.35;
+const MINIMUM_UNCORROBORATED_SIMILARITY = 0.78;
 const MAX_CACHED_DOCUMENTS = 2;
 const documentEmbeddingCache = new Map<string, Promise<number[][]>>();
 const NON_CONTENT_QUERY_TERMS = new Set([
@@ -288,20 +289,46 @@ export async function retrieveSemanticallyRelevantChunks(
         pageNumbers: getPageNumbers(chunk, options.pageRanges ?? []),
       };
     })
-    .filter(
-      (result) =>
-        result.score >= MINIMUM_SEMANTIC_SIMILARITY &&
-        (!requireLexicalCorroboration ||
-          [...result.contentTerms].filter((term) => queryTerms.includes(term))
-            .length >= minimumChunkMatches),
-    )
+    .filter((result) => result.score >= MINIMUM_SEMANTIC_SIMILARITY)
     .sort((left, right) => right.score - left.score || left.index - right.index);
 
-  const completeResults = results.filter(
+  const corroboratedResults = requireLexicalCorroboration
+    ? results.filter(
+        (result) =>
+          [...result.contentTerms].filter((term) => queryTerms.includes(term))
+            .length >= minimumChunkMatches,
+      )
+    : results;
+
+  // Embeddings can recognize a genuine synonym-only match. Keep this path
+  // deliberately stricter than ordinary retrieval and return only the single
+  // strongest passage; weak semantic similarity never bypasses lexical checks.
+  if (
+    requireLexicalCorroboration &&
+    corroboratedResults.length === 0
+  ) {
+    const semanticOnlyMatch = results.find(
+      (result) =>
+        result.score >= MINIMUM_UNCORROBORATED_SIMILARITY &&
+        result.contentTerms.size >= 2,
+    );
+    return semanticOnlyMatch
+      ? [{
+          chunk: semanticOnlyMatch.chunk,
+          score: semanticOnlyMatch.score,
+          index: semanticOnlyMatch.index,
+          start: semanticOnlyMatch.start,
+          end: semanticOnlyMatch.end,
+          pageNumbers: semanticOnlyMatch.pageNumbers,
+        }]
+      : [];
+  }
+
+  const completeResults = corroboratedResults.filter(
     (result) =>
       queryTerms.every((term) => result.contentTerms.has(term)),
   );
-  const selected = (completeResults.length > 0 ? completeResults : results)
+  const selected = (completeResults.length > 0 ? completeResults : corroboratedResults)
     .slice(0, options.maxResults ?? 3);
   const coverageSelected =
     completeResults.length > 0 || !requireLexicalCorroboration
