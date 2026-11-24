@@ -6,6 +6,7 @@ import {
   diagramToMermaidSource,
   MAX_MERMAID_SOURCE_LENGTH,
   renderMermaidSafely,
+  validateGeneralDiagram,
   validateGroundedDiagram,
   type DiagramData,
   type MermaidRenderResult,
@@ -16,10 +17,12 @@ export function MermaidDiagram({
   data,
   sourcePassages,
   source,
+  allowUngrounded = false,
 }: {
   data?: DiagramData;
   sourcePassages?: string[];
   source?: string;
+  allowUngrounded?: boolean;
 }) {
   const { theme } = useTheme();
   const diagramId = `tutor-diagram-${useId().replaceAll(":", "")}`;
@@ -27,7 +30,9 @@ export function MermaidDiagram({
     data === undefined
       ? source ?? null
       : diagramToMermaidSource(
-          validateGroundedDiagram(data, sourcePassages ?? []),
+          allowUngrounded
+            ? validateGeneralDiagram(data)
+            : validateGroundedDiagram(data, sourcePassages ?? []),
         );
   const [renderState, setRenderState] = useState<{
     source: string | null;
