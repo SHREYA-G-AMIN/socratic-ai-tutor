@@ -45,6 +45,8 @@ export interface DocumentUploadSuccessData {
   truncated: boolean;
   /** True when text was recovered from scanned page images. */
   ocrUsed?: boolean;
+  /** OCR engine used for scanned pages, when OCR was needed. */
+  ocrProvider?: "gemini" | "tesseract";
 }
 
 export interface DocumentUploadSuccessResponse {
