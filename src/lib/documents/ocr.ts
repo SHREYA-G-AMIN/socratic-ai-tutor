@@ -91,24 +91,33 @@ export async function recognizeScannedPdf(
   });
 
   let response: Response;
+  let attempts = 0;
   try {
-    response = await fetcher(
-      `${GEMINI_API}/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": apiKey,
+    // Gemini can return 503 during temporary capacity spikes. Retry that
+    // transient response once; do not retry quota, auth, or request errors.
+    for (attempts = 1; attempts <= 2; attempts += 1) {
+      response = await fetcher(
+        `${GEMINI_API}/${encodeURIComponent(model)}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: requestBody,
+          signal: AbortSignal.timeout(OCR_TIMEOUT_MS),
         },
-        body: requestBody,
-        signal: AbortSignal.timeout(OCR_TIMEOUT_MS),
-      },
-    );
+      );
+      if (response.status !== 503 || attempts === 2) break;
+      console.warn("[documents/ocr] Gemini is busy; retrying once", { model, attempt: attempts });
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
   } catch (error) {
     const timedOut = error instanceof Error && error.name === "TimeoutError";
     console.error("[documents/ocr] Gemini request failed", {
       reason: timedOut ? "timeout" : error instanceof Error ? error.name : "unknown",
       model,
+      attempts,
     });
     throw new DocumentProcessingError(
       "OCR_FAILED",
@@ -127,6 +136,7 @@ export async function recognizeScannedPdf(
       model,
       pdfBytes: bytes.byteLength,
       encodedPdfCharacters: pdfBase64.length,
+      attempts,
       message: redactSecret(providerMessage, apiKey).slice(0, MAX_PROVIDER_ERROR_LENGTH),
     });
     throw new DocumentProcessingError("OCR_FAILED", describeProviderFailure(response.status));
