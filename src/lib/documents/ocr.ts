@@ -90,7 +90,7 @@ export async function recognizeScannedPdf(
     },
   });
 
-  let response: Response;
+  let response: Response | undefined;
   let attempts = 0;
   try {
     // Gemini can return 503 during temporary capacity spikes. Retry that
@@ -125,6 +125,10 @@ export async function recognizeScannedPdf(
         ? "Scanned PDF OCR took too long. Try a smaller PDF or fewer scanned pages."
         : "Could not connect to the OCR service. Check your network connection and try again.",
     );
+  }
+
+  if (!response) {
+    throw new DocumentProcessingError("OCR_FAILED", "The OCR service did not return a response.");
   }
 
   if (!response.ok) {
