@@ -5,7 +5,7 @@ import type { DocumentPageRange } from "@/types/document";
 
 const GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_OCR_MODEL = "gemini-2.5-flash";
-const OCR_TIMEOUT_MS = 60_000;
+const OCR_TIMEOUT_MS = 45_000;
 
 interface OcrPage {
   pageNumber: number;
