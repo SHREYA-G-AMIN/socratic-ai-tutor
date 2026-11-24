@@ -23,6 +23,7 @@ export interface PdfExtraction {
   pageCount: number | null;
   /** True when the extracted text was cut off at the response limit. */
   truncated: boolean;
+  ocrUsed?: boolean;
 }
 
 /**
@@ -62,10 +63,15 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtraction> 
     const { text, pageRanges, truncated } = joinPageText(pageTexts);
 
     if (text.length === 0) {
-      throw new DocumentProcessingError(
-        "NO_TEXT_CONTENT",
-        "No readable text was found in this PDF. It is most likely a scanned document, which needs OCR before it can be used.",
-      );
+      const ocr = await recognizeScannedPdf(bytes, pageCount);
+      return {
+        text: ocr.text,
+        characterCount: ocr.text.length,
+        pageRanges: ocr.pageRanges,
+        pageCount,
+        truncated: ocr.truncated,
+        ocrUsed: true,
+      };
     }
 
     return {
@@ -74,6 +80,7 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtraction> 
       pageRanges,
       pageCount,
       truncated,
+      ocrUsed: false,
     };
   } finally {
     await document.loadingTask.destroy();
