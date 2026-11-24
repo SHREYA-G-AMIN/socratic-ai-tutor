@@ -19,6 +19,7 @@ interface Message {
   text: string;
   diagram?: string;
   diagramData?: DiagramData;
+  diagramIsGeneral?: boolean;
   sources?: ChatSourceReference[];
   warning?: string;
 }
@@ -130,6 +131,7 @@ export default function Home() {
           text: chatBody.reply,
           diagram: chatBody.diagram,
           diagramData: chatBody.diagramData,
+          diagramIsGeneral: chatBody.diagramIsGeneral,
           sources: chatBody.sources,
           warning: chatBody.warning,
         },
@@ -409,6 +411,7 @@ export default function Home() {
                       data={msg.diagramData}
                       sourcePassages={msg.sources?.map((source) => source.text)}
                       source={msg.diagram}
+                      allowUngrounded={msg.diagramIsGeneral}
                     />
                   )}
                   {msg.warning && (
@@ -472,7 +475,7 @@ export default function Home() {
                 className="flex items-start gap-2.5 justify-start"
               >
                 <div className="w-7 h-7 rounded-lg bg-surface-elevated border border-border text-accent-primary flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
-                  S
+                  T
                 </div>
                 <div className="bg-surface-elevated border border-border px-4 py-3 rounded-2xl rounded-tl-xs text-text-primary shadow-xs flex items-center gap-1.5">
                   <span className="sr-only">The tutor is preparing a response.</span>
