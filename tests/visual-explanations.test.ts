@@ -167,6 +167,26 @@ test("inline json code responses are normalized and parsed as general diagrams",
   assert.match(parsed.diagram ?? "", /supports execution/);
 });
 
+test("general diagrams tolerate optional provenance fields from the model", () => {
+  const data = {
+    type: "concept",
+    direction: "TD",
+    nodes: [
+      { id: "hardware", label: "Computer Hardware", sourceIndex: 1, evidence: "Computer Hardware" },
+      { id: "kernel", label: "Operating System Kernel", sourceIndex: 1, evidence: "Operating System Kernel" },
+    ],
+    edges: [
+      { from: "hardware", to: "kernel", label: "managed by", sourceIndex: 1, evidence: "Computer Hardware managed by Operating System Kernel" },
+    ],
+  };
+  const parsed = parseTutorResponse(
+    `General explanation.\n\n```diagram-json\n${JSON.stringify(data)}\n````,
+    { allowDiagram: true, requireDiagram: true, allowUngroundedDiagram: true },
+  );
+  assert.equal(parsed.diagramData?.nodes.length, 2);
+  assert.match(parsed.diagram ?? "", /managed by/);
+});
+
 test("malformed JSON and schema violations are safely omitted", () => {
   const malformed = parseTutorResponse(
     "Summary.\n```diagram-json\n{broken json\n```",
