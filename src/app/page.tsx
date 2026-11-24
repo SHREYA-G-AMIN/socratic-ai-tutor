@@ -200,6 +200,7 @@ export default function Home() {
           text: chatBody.reply,
           diagram: chatBody.diagram,
           diagramData: chatBody.diagramData,
+          diagramIsGeneral: chatBody.diagramIsGeneral,
           sources: chatBody.sources,
           warning: chatBody.warning,
         },
