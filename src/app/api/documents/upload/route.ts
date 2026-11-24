@@ -14,6 +14,9 @@ import type {
   DocumentUploadResponse,
 } from "@/types/document";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 /**
  * POST /api/documents/upload
  *
