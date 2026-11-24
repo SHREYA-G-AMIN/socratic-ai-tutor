@@ -20,7 +20,8 @@ export async function recognizeScannedPdf(
   bytes: Uint8Array,
   pageCount: number,
   fetcher: typeof fetch = fetch,
-): Promise<{ text: string; pageRanges: DocumentPageRange[]; truncated: boolean }> {
+  pageNumbers: number[] = Array.from({ length: pageCount }, (_, index) => index + 1),
+): Promise<{ text: string; pageRanges: DocumentPageRange[]; truncated: boolean; pageTexts: string[] }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new DocumentProcessingError(
@@ -47,13 +48,13 @@ export async function recognizeScannedPdf(
             parts: [
               {
                 text: [
-                  "Perform OCR on this scanned PDF.",
-                  "Transcribe the readable text from every page in reading order.",
+                  "Perform OCR on the specified scanned PDF pages only.",
+                  `Transcribe these one-based page numbers: ${pageNumbers.join(", ")}.`,
                   "Preserve headings, paragraphs, lists, equations, and meaningful line breaks.",
                   "Do not summarize, explain, infer missing text, or add commentary.",
                   "Return only valid JSON in this shape:",
                   '{"pages":[{"pageNumber":1,"text":"transcribed page text"}]}',
-                  `The PDF has ${pageCount} pages. Include one entry per page, even if a page has no readable text.`,
+                  `The PDF has ${pageCount} pages. Return one entry for each requested page number only.`,
                 ].join("\n"),
               },
               {
@@ -138,7 +139,7 @@ export async function recognizeScannedPdf(
       "No readable text could be recognized in this scanned PDF.",
     );
   }
-  return joined;
+  return { ...joined, pageTexts: normalizedPages };
 }
 
 function joinOcrPages(pageTexts: string[]): {
