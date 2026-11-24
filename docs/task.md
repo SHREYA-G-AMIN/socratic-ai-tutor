@@ -14,9 +14,9 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 - [Complete] Retrieve semantically relevant chunks using Gemini embeddings.
 - [Complete] Fall back to keyword retrieval if semantic embeddings fail and return a warning.
 - [Complete] Require the existing semantic score cutoff plus up to two distinct content-term matches for focused questions; keyword fallback uses the same overlap rule. Document-wide summaries are exempt and remain retrievable.
-- [Partial] Persist document vectors — a bounded in-process cache is used; there is no durable vector store.
+- [Complete] Persist document vectors in Supabase Postgres using content/model hashes; retain a bounded in-process cache as a fallback. Requires the supplied migration and server environment variables.
 - [Complete] Return a no-evidence response without invoking Gemini when retrieval finds no sources.
-- [Partial] Support scanned PDFs — OCR is not implemented.
+- [Complete] OCR scanned PDF pages with Gemini PDF vision when the PDF text layer is absent on a page; preserve original page numbers and character ranges.
 
 ## Milestone 2 — Gemini Socratic Tutoring and Adaptation
 
@@ -56,7 +56,7 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 
 ## Current Limits
 
-- No OCR, database, durable chat history, or persistent vector store.
+- Durable vector storage requires applying the Supabase migration and configuring server-only Supabase credentials. Chat history remains session-scoped and is not persisted.
 - Retrieval depends on the provided document and configured Gemini API; keyword
   fallback is less effective for semantically related terms.
 - Focused semantic/keyword retrieval requires up to two distinct topic-term
