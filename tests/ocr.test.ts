@@ -50,8 +50,12 @@ test("OCR extracts only requested scanned pages and preserves page numbers", asy
     const contents = requestBody?.contents as Array<{ parts: Array<Record<string, unknown>> }>;
     assert.match(String(contents[0].parts[0].text), /2/);
     assert.equal(
-      (contents[0].parts[1].inlineData as { mimeType: string }).mimeType,
+      (contents[0].parts[1].inline_data as { mime_type: string }).mime_type,
       "application/pdf",
+    );
+    assert.ok(
+      (contents[0].parts[1].inline_data as { data: string }).data.length > 0,
+      "the PDF must be base64-encoded in the inline_data part",
     );
   } finally {
     if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
