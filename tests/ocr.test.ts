@@ -5,16 +5,24 @@ import { register } from "node:module";
 register("./server-only-hook.mjs", import.meta.url);
 const { recognizeScannedPdf } = await import("../src/lib/documents/ocr.ts");
 
-test("OCR extracts only requested scanned pages and preserves page numbers", async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
+const previousKey = process.env.GEMINI_API_KEY;
+
+function setTestKey() {
   process.env.GEMINI_API_KEY = "test-key";
+}
+
+test("OCR extracts only requested scanned pages and preserves page numbers", async () => {
+  setTestKey();
   let requestBody: Record<string, unknown> | undefined;
+  let requestUrl = "";
   try {
     const result = await recognizeScannedPdf(
       new Uint8Array([37, 80, 68, 70]),
       3,
-      async (_input, init) => {
+      async (input, init) => {
+        requestUrl = String(input);
         requestBody = JSON.parse(String(init?.body));
+        assert.equal(new Headers(init?.headers).get("x-goog-api-key"), "test-key");
         return Response.json({
           candidates: [{
             content: {
@@ -30,6 +38,7 @@ test("OCR extracts only requested scanned pages and preserves page numbers", asy
       [2],
     );
 
+    assert.match(requestUrl, /gemini-2\.5-flash:generateContent$/);
     assert.equal(result.pageTexts[0], "");
     assert.equal(result.pageTexts[1], "Recognized scanned page two.");
     assert.equal(result.pageTexts[2], "");
@@ -50,15 +59,68 @@ test("OCR extracts only requested scanned pages and preserves page numbers", asy
   }
 });
 
+test("OCR accepts a model configured with the models/ prefix", async () => {
+  setTestKey();
+  const previousModel = process.env.GEMINI_OCR_MODEL;
+  process.env.GEMINI_OCR_MODEL = "models/gemini-2.5-flash";
+  try {
+    let requestUrl = "";
+    await recognizeScannedPdf(
+      new Uint8Array([37, 80, 68, 70]),
+      1,
+      async (input) => {
+        requestUrl = String(input);
+        return Response.json({
+          candidates: [{ content: { parts: [{ text: '{"pages":[{"pageNumber":1,"text":"OCR text"}]}' }] } }],
+        });
+      },
+    );
+    assert.match(requestUrl, /\/models\/gemini-2\.5-flash:generateContent$/);
+    assert.doesNotMatch(requestUrl, /models%2F/);
+  } finally {
+    if (previousModel === undefined) delete process.env.GEMINI_OCR_MODEL;
+    else process.env.GEMINI_OCR_MODEL = previousModel;
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+  }
+});
+
 test("OCR reports a clear configuration error when the Gemini key is missing", async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   try {
     await assert.rejects(
       recognizeScannedPdf(new Uint8Array([1]), 1, async () => {
         assert.fail("OCR must not call the provider without an API key");
       }),
-      /Set GEMINI_API_KEY/,
+      /Add GEMINI_API_KEY/,
+    );
+  } finally {
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+  }
+});
+
+test("OCR reports actionable API-key errors for provider authorization failures", async () => {
+  setTestKey();
+  try {
+    await assert.rejects(
+      recognizeScannedPdf(new Uint8Array([37, 80, 68, 70]), 1, async () =>
+        Response.json({ error: { message: "API key not valid" } }, { status: 403 })),
+      /Gemini rejected the API key/,
+    );
+  } finally {
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+  }
+});
+
+test("OCR reports actionable model errors when the configured model is missing", async () => {
+  setTestKey();
+  try {
+    await assert.rejects(
+      recognizeScannedPdf(new Uint8Array([37, 80, 68, 70]), 1, async () =>
+        Response.json({ error: { message: "Model not found" } }, { status: 404 })),
+      /configured Gemini OCR model was not found/,
     );
   } finally {
     if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
@@ -67,8 +129,7 @@ test("OCR reports a clear configuration error when the Gemini key is missing", a
 });
 
 test("OCR rejects responses that omit a requested scanned page", async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  process.env.GEMINI_API_KEY = "test-key";
+  setTestKey();
   try {
     await assert.rejects(
       recognizeScannedPdf(
