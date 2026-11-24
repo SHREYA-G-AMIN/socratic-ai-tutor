@@ -32,7 +32,8 @@ export async function recognizeScannedPdfLocally(
         canvasImport: () => import("@napi-rs/canvas"),
         scale: 2,
       });
-      const result = await worker.recognize(image);
+      // unpdf returns an ArrayBuffer; Tesseract's Node API expects a Buffer/ImageLike.
+      const result = await worker.recognize(Buffer.from(image));
       pageTexts[pageNumber - 1] = result.data.text;
     }
     return joinPages(pageTexts);
