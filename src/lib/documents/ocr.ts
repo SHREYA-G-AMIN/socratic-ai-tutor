@@ -27,7 +27,6 @@ export async function recognizeScannedPdf(
     throw new DocumentProcessingError(
       "OCR_UNAVAILABLE",
       "This PDF appears to be scanned. Set GEMINI_API_KEY on the server to enable OCR.",
-      503,
     );
   }
 
@@ -77,7 +76,6 @@ export async function recognizeScannedPdf(
     throw new DocumentProcessingError(
       "OCR_FAILED",
       "OCR could not process this scanned PDF. Please try a clearer or smaller PDF.",
-      502,
     );
   }
 
@@ -93,7 +91,7 @@ export async function recognizeScannedPdf(
   try {
     payload = await response.json();
   } catch {
-    throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned an invalid response.", 502);
+    throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned an invalid response.", );
   }
 
   const output = payload.candidates?.[0]?.content?.parts
@@ -121,6 +119,7 @@ export async function recognizeScannedPdf(
         Number.isInteger((page as OcrPage).pageNumber) &&
         (page as OcrPage).pageNumber >= 1 &&
         (page as OcrPage).pageNumber <= pageCount &&
+        pageNumbers.includes((page as OcrPage).pageNumber) &&
         typeof (page as OcrPage).text === "string",
       )
       .sort((left, right) => left.pageNumber - right.pageNumber);
