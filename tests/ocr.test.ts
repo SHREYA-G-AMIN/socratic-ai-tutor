@@ -120,7 +120,7 @@ test("OCR reports actionable model errors when the configured model is missing",
     await assert.rejects(
       recognizeScannedPdf(new Uint8Array([37, 80, 68, 70]), 1, async () =>
         Response.json({ error: { message: "Model not found" } }, { status: 404 })),
-      /configured Gemini OCR model was not found/,
+      /configured Gemini OCR model is unavailable or has been retired/,
     );
   } finally {
     if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
