@@ -606,3 +606,43 @@ test("semantic retrieval reuses document embeddings for follow-up questions", as
 test("cosine similarity rejects vectors with different dimensions", () => {
   assert.throws(() => cosineSimilarity([1, 0], [1]), RangeError);
 });
+
+test("semantic retrieval accepts a high-confidence synonym-only passage", async () => {
+  const chunks = chunkText(
+    "The document explains how rapid motion changes the position of an object over time.",
+    { chunkSize: 200, chunkOverlap: 0 },
+  );
+  const embedder = async (_texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY"
+      ? [[1, 0]]
+      : [[0.8, 0.6]];
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "How does fast movement affect an object's location?",
+    { embedder, model: "test-synonym-only-retrieval-model" },
+  );
+
+  assert.equal(results.length, 1);
+  assert.match(results[0].chunk, /rapid motion changes the position/i);
+  assert.ok(results[0].score >= 0.78);
+});
+
+test("semantic-only retrieval still rejects a weak embedding match", async () => {
+  const chunks = chunkText(
+    "The document explains how rapid motion changes the position of an object over time.",
+    { chunkSize: 200, chunkOverlap: 0 },
+  );
+  const embedder = async (_texts: string[], taskType: string) =>
+    taskType === "RETRIEVAL_QUERY"
+      ? [[1, 0]]
+      : [[0.7, Math.sqrt(1 - 0.7 ** 2)]];
+
+  const results = await retrieveSemanticallyRelevantChunks(
+    chunks,
+    "How does fast movement affect an object's location?",
+    { embedder, model: "test-weak-synonym-retrieval-model" },
+  );
+
+  assert.deepEqual(results, []);
+});
