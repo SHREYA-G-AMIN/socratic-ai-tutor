@@ -35,6 +35,10 @@ export interface PdfExtraction {
  * returns.
  */
 export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtraction> {
+  // PDF.js may transfer/detach the supplied ArrayBuffer while loading the
+  // document. Keep an independent copy for Gemini OCR, which runs after
+  // text extraction and still needs the original PDF bytes.
+  const ocrBytes = bytes.slice();
   const document = await openDocument(bytes);
 
   try {
@@ -65,7 +69,7 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtraction> 
       .filter((pageNumber): pageNumber is number => pageNumber !== null);
 
     if (pagesNeedingOcr.length > 0) {
-      const ocr = await recognizeScannedPdf(bytes, pageCount, fetch, pagesNeedingOcr);
+      const ocr = await recognizeScannedPdf(ocrBytes, pageCount, fetch, pagesNeedingOcr);
       const combined = joinPageText(
         pageTexts.map((pageText, index) =>
           normalizeText(pageText) || ocr.pageTexts[index] || "",
