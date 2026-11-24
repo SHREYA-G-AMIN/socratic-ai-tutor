@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { DocumentPageRange } from "@/types/document";
 import type { TextChunk } from "./chunker";
+import { loadDocumentEmbeddings, saveDocumentEmbeddings } from "./vector-store";
 import {
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   getGeminiEmbeddingModel,
@@ -253,9 +254,11 @@ export async function retrieveSemanticallyRelevantChunks(
     chunks.map((chunk) => chunk.text),
     model,
   );
+  const chunkTexts = chunks.map((chunk) => chunk.text);
   const documentVectors = await getCachedDocumentEmbeddings(
     cacheKey,
-    chunks.map((chunk) => chunk.text),
+    model,
+    chunkTexts,
     embedder,
   );
   if (documentVectors.length !== chunks.length) {
@@ -492,6 +495,7 @@ function getPageNumbers(
 
 async function getCachedDocumentEmbeddings(
   cacheKey: string,
+  model: string,
   texts: string[],
   embedder: EmbeddingBatch,
 ): Promise<number[][]> {
@@ -503,14 +507,34 @@ async function getCachedDocumentEmbeddings(
     return cached;
   }
 
-  cached = embedder(texts, "RETRIEVAL_DOCUMENT");
+  cached = (async () => {
+    // Only the production Gemini embedder uses the durable store. Injected
+    // test/custom embedders remain isolated and deterministic.
+    if (embedder === generateEmbeddings) {
+      const stored = await loadDocumentEmbeddings(cacheKey, model, texts);
+      if (stored) return stored;
+    }
+
+    const vectors = await embedder(texts, "RETRIEVAL_DOCUMENT");
+    if (embedder === generateEmbeddings) {
+      const persisted = await saveDocumentEmbeddings(
+        cacheKey,
+        model,
+        texts,
+        vectors,
+      );
+      if (!persisted && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.warn("[retrieval] durable vector storage unavailable; using process cache");
+      }
+    }
+    return vectors;
+  })();
+
   documentEmbeddingCache.set(cacheKey, cached);
 
   while (documentEmbeddingCache.size > MAX_CACHED_DOCUMENTS) {
     const oldestKey = documentEmbeddingCache.keys().next().value;
-    if (oldestKey) {
-      documentEmbeddingCache.delete(oldestKey);
-    }
+    if (oldestKey) documentEmbeddingCache.delete(oldestKey);
   }
 
   try {
