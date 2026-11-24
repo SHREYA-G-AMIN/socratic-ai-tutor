@@ -91,7 +91,7 @@ export async function recognizeScannedPdf(
   try {
     payload = await response.json();
   } catch {
-    throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned an invalid response.", );
+    throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned an invalid response.");
   }
 
   const output = payload.candidates?.[0]?.content?.parts
@@ -99,7 +99,7 @@ export async function recognizeScannedPdf(
     .join("")
     .trim();
   if (!output) {
-    throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned no readable text.", 502);
+    throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned no readable text.");
   }
 
   let pages: OcrPage[];
@@ -124,7 +124,7 @@ export async function recognizeScannedPdf(
       )
       .sort((left, right) => left.pageNumber - right.pageNumber);
   } catch {
-    throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned unreadable page data.", 502);
+    throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned unreadable page data.");
   }
 
   const normalizedPages = Array.from({ length: pageCount }, (_, index) => {
