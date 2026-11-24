@@ -138,6 +138,35 @@ test("valid concept diagrams preserve relationship and citation data", () => {
   assert.match(parsed.diagram ?? "", /are stored in/);
 });
 
+test("inline json code responses are normalized and parsed as general diagrams", () => {
+  const generalDiagram = {
+    type: "concept",
+    direction: "TD",
+    nodes: [
+      { id: "hardware", label: "Computer Hardware" },
+      { id: "kernel", label: "Operating System Kernel" },
+      { id: "apps", label: "Application Software" },
+    ],
+    edges: [
+      { from: "hardware", to: "kernel", label: "managed by" },
+      { from: "kernel", to: "apps", label: "supports execution" },
+    ],
+  };
+  const parsed = parseTutorResponse(
+    `A general explanation.\\n\\n\x60json ${JSON.stringify(generalDiagram)} \x60`,
+    {
+      allowDiagram: true,
+      requireDiagram: true,
+      allowUngroundedDiagram: true,
+    },
+  );
+
+  assert.equal(parsed.reply, "A general explanation.");
+  assert.equal(parsed.diagramData?.nodes.length, 3);
+  assert.match(parsed.diagram ?? "", /^flowchart LR/);
+  assert.match(parsed.diagram ?? "", /supports execution/);
+});
+
 test("malformed JSON and schema violations are safely omitted", () => {
   const malformed = parseTutorResponse(
     "Summary.\n```diagram-json\n{broken json\n```",
