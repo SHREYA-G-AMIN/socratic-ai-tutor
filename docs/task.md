@@ -32,7 +32,7 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 - [Complete] Reset conversation and progress when the active document changes; remove failed chat attempts so they do not count as learning evidence.
 - [Complete] Keep source citations attached to all grounded tutor responses.
 - [Partial] Validate every generated prose claim against source text — Gemini is instructed to stay grounded, but there is no deterministic fact-checker.
-- [Partial] Confusion detection — rule-based text matching only; no paraphrase or sentiment model, and no emotion diagnosis.
+- [Complete] Extend rule-based confusion detection to common natural-language difficulty phrases and conservative paraphrases of repeated questions; no sentiment model or emotion diagnosis is used.
 
 ## Milestone 3 — Visual Explanations
 
@@ -49,7 +49,7 @@ scope is incomplete; **Not started** means no implementation/evidence is present
 - [Complete] Cover missing/multiple files, empty files, and invalid PDF signatures with upload-validation tests.
 - [Complete] Run the PDF upload endpoint smoke test against a live local server; confirmed HTTP 200, two pages, and extracted text.
 - [Complete] Maintain targeted tests for confusion, adaptive prompts, learning progress, retrieval, citations, diagram validation, and API behavior.
-- [Partial] Run the current full-suite, TypeScript, lint, and production-build checks in automated CI; the new workflow must complete successfully before release readiness is confirmed.
+- [Complete] Run the full test suite, TypeScript, ESLint, and production build in automated CI; all checks pass on the readiness PR.
 - [Complete] Reconcile README, architecture documentation, and this checklist with current implementation.
 - [Not started] Deploy the application or validate a deployed environment.
 - [Complete] Add GitHub Actions CI for install, tests, TypeScript, lint, and production build.
@@ -63,6 +63,6 @@ scope is incomplete; **Not started** means no implementation/evidence is present
   matches; valid synonym-only or abbreviation-only matches may be declined.
 - Model output quality and grounding are not deterministically verified.
 - Learning-progress feedback is a conservative conversation summary based on explicit tutor wording and interaction cues; it is not an independent correctness checker or mastery assessment.
-- Confusion detection uses text rules and recent conversation turns; it may miss paraphrased difficulty and does not infer a student's emotional state.
+- Confusion detection uses text rules, a small phrase/alias set, and recent conversation turns; novel paraphrases may still be missed. It does not infer or diagnose a student's emotional state.
 - Automated Gemini route tests use mocked provider calls and do not assess live
   model behavior.
