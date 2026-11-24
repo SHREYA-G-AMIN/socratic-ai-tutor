@@ -38,7 +38,7 @@ test("OCR extracts only requested scanned pages and preserves page numbers", asy
       [2],
     );
 
-    assert.match(requestUrl, /gemini-2\.5-flash:generateContent$/);
+    assert.match(requestUrl, /gemini-3\.8-flash:generateContent$/);
     assert.equal(result.pageTexts[0], "");
     assert.equal(result.pageTexts[1], "Recognized scanned page two.");
     assert.equal(result.pageTexts[2], "");
@@ -62,7 +62,7 @@ test("OCR extracts only requested scanned pages and preserves page numbers", asy
 test("OCR accepts a model configured with the models/ prefix", async () => {
   setTestKey();
   const previousModel = process.env.GEMINI_OCR_MODEL;
-  process.env.GEMINI_OCR_MODEL = "models/gemini-2.5-flash";
+  process.env.GEMINI_OCR_MODEL = "models/gemini-3.8-flash";
   try {
     let requestUrl = "";
     await recognizeScannedPdf(
@@ -75,7 +75,7 @@ test("OCR accepts a model configured with the models/ prefix", async () => {
         });
       },
     );
-    assert.match(requestUrl, /\/models\/gemini-2\.5-flash:generateContent$/);
+    assert.match(requestUrl, /\/models\/gemini-3\.8-flash:generateContent$/);
     assert.doesNotMatch(requestUrl, /models%2F/);
   } finally {
     if (previousModel === undefined) delete process.env.GEMINI_OCR_MODEL;
