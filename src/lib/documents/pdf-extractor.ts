@@ -9,6 +9,7 @@ import {
   MAX_PDF_PAGES,
 } from "./constants";
 import { DocumentProcessingError } from "./errors";
+import { recognizeScannedPdf } from "./ocr";
 import type { DocumentPageRange } from "@/types/document";
 
 export interface PdfExtraction {
@@ -22,6 +23,7 @@ export interface PdfExtraction {
   pageCount: number | null;
   /** True when the extracted text was cut off at the response limit. */
   truncated: boolean;
+  ocrUsed?: boolean;
 }
 
 /**
@@ -58,21 +60,41 @@ export async function extractPdfText(bytes: Uint8Array): Promise<PdfExtraction> 
       );
     }
 
-    const { text, pageRanges, truncated } = joinPageText(pageTexts);
+    const pagesNeedingOcr = pageTexts
+      .map((pageText, index) => normalizeText(pageText) ? null : index + 1)
+      .filter((pageNumber): pageNumber is number => pageNumber !== null);
 
-    if (text.length === 0) {
-      throw new DocumentProcessingError(
-        "NO_TEXT_CONTENT",
-        "No readable text was found in this PDF. It is most likely a scanned document, which needs OCR before it can be used.",
+    if (pagesNeedingOcr.length > 0) {
+      const ocr = await recognizeScannedPdf(bytes, pageCount, fetch, pagesNeedingOcr);
+      const combined = joinPageText(
+        pageTexts.map((pageText, index) =>
+          normalizeText(pageText) || ocr.pageTexts[index] || "",
+        ),
       );
+      if (!combined.text) {
+        throw new DocumentProcessingError(
+          "NO_TEXT_CONTENT",
+          "No readable text could be recognized in this PDF.",
+        );
+      }
+      return {
+        text: combined.text,
+        characterCount: combined.text.length,
+        pageRanges: combined.pageRanges,
+        pageCount,
+        truncated: combined.truncated || ocr.truncated,
+        ocrUsed: true,
+      };
     }
 
+    const { text, pageRanges, truncated } = joinPageText(pageTexts);
     return {
       text,
       characterCount: text.length,
       pageRanges,
       pageCount,
       truncated,
+      ocrUsed: false,
     };
   } finally {
     await document.loadingTask.destroy();

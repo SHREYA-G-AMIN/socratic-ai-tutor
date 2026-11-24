@@ -14,6 +14,8 @@ import type {
   DocumentUploadResponse,
 } from "@/types/document";
 
+export const maxDuration = 60;
+
 /**
  * POST /api/documents/upload
  *
@@ -21,8 +23,8 @@ import type {
  * text as JSON.
  *
  * The route handler runs on the server only. The uploaded file is read into
- * memory, parsed, and discarded; it is never written to disk and no
- * credentials are involved at this stage.
+ * memory, parsed, and discarded; scanned PDFs use the server-side Gemini key
+ * for OCR. The original PDF is never written to disk.
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -41,6 +43,7 @@ export async function POST(request: Request): Promise<Response> {
         text: extraction.text,
         pageRanges: extraction.pageRanges,
         truncated: extraction.truncated,
+        ocrUsed: extraction.ocrUsed ?? false,
       },
     };
 
@@ -82,7 +85,7 @@ export function GET(): Response {
       maxFileSizeBytes: MAX_UPLOAD_SIZE_BYTES,
       maxPages: MAX_PDF_PAGES,
       description:
-        "Upload a single PDF. Returns the extracted text, character count and page count.",
+        "Upload a single PDF. Returns extracted text and page ranges; scanned PDFs use Gemini OCR.",
     },
   });
 }

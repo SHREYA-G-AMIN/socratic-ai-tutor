@@ -15,7 +15,9 @@ export type DocumentUploadErrorCode =
   | "PDF_PARSE_FAILED"
   | "NO_TEXT_CONTENT"
   | "TOO_MANY_PAGES"
-  | "EXTRACTION_FAILED";
+  | "EXTRACTION_FAILED"
+  | "OCR_UNAVAILABLE"
+  | "OCR_FAILED";
 
 export interface DocumentPageRange {
   /** One-based PDF page number reported by the PDF parser. */
@@ -41,6 +43,8 @@ export interface DocumentUploadSuccessData {
   pageRanges: DocumentPageRange[];
   /** True when the extracted text was longer than the response limit. */
   truncated: boolean;
+  /** True when text was recovered from scanned page images. */
+  ocrUsed?: boolean;
 }
 
 export interface DocumentUploadSuccessResponse {

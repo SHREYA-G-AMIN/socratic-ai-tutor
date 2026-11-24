@@ -834,3 +834,40 @@ test("an unsupported diagram claim is omitted while its answer and citations rem
     });
   });
 });
+
+test("chat history is bounded to the latest twelve valid turns", async () => {
+  await withApiKey("test-key", async () => {
+    let geminiRequest: Record<string, unknown> | undefined;
+    await withFetch(async (input, init) => {
+      if (String(input).includes("batchEmbedContents")) {
+        return new Response("provider unavailable", { status: 503 });
+      }
+
+      geminiRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeTutorResponse("A binary search tree stores ordered values.");
+    }, async () => {
+      const history = Array.from({ length: 20 }, (_, index) => ({
+        role: index % 2 === 0 ? "student" : "tutor",
+        text: `Conversation turn ${index}`,
+      }));
+      const response = await POST(
+        makeRequest({
+          message: "Explain binary search tree nodes",
+          documentText:
+            "A binary search tree stores ordered values in nodes. Smaller values go left and larger values go right.",
+          history,
+        }),
+      );
+
+      assert.equal(response.status, 200);
+      assert.ok(geminiRequest);
+      const request = geminiRequest as {
+        contents: Array<{ role: string; parts: Array<{ text: string }> }>;
+      };
+      assert.equal(request.contents.length, 13);
+      assert.match(request.contents[0].parts[0].text, /^Conversation turn 8$/);
+      assert.match(request.contents[11].parts[0].text, /^Conversation turn 19$/);
+      assert.match(request.contents[12].parts[0].text, /Passage 1/);
+    });
+  });
+});

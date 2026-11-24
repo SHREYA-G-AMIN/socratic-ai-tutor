@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { DocumentPageRange } from "@/types/document";
 import type { TextChunk } from "./chunker";
+import { loadDocumentEmbeddings, saveDocumentEmbeddings } from "./vector-store";
 import {
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   getGeminiEmbeddingModel,
@@ -11,6 +12,7 @@ import {
 } from "./embeddings";
 
 const MINIMUM_SEMANTIC_SIMILARITY = 0.35;
+const MINIMUM_UNCORROBORATED_SIMILARITY = 0.78;
 const MAX_CACHED_DOCUMENTS = 2;
 const documentEmbeddingCache = new Map<string, Promise<number[][]>>();
 const NON_CONTENT_QUERY_TERMS = new Set([
@@ -252,9 +254,11 @@ export async function retrieveSemanticallyRelevantChunks(
     chunks.map((chunk) => chunk.text),
     model,
   );
+  const chunkTexts = chunks.map((chunk) => chunk.text);
   const documentVectors = await getCachedDocumentEmbeddings(
     cacheKey,
-    chunks.map((chunk) => chunk.text),
+    model,
+    chunkTexts,
     embedder,
   );
   if (documentVectors.length !== chunks.length) {
@@ -288,20 +292,46 @@ export async function retrieveSemanticallyRelevantChunks(
         pageNumbers: getPageNumbers(chunk, options.pageRanges ?? []),
       };
     })
-    .filter(
-      (result) =>
-        result.score >= MINIMUM_SEMANTIC_SIMILARITY &&
-        (!requireLexicalCorroboration ||
-          [...result.contentTerms].filter((term) => queryTerms.includes(term))
-            .length >= minimumChunkMatches),
-    )
+    .filter((result) => result.score >= MINIMUM_SEMANTIC_SIMILARITY)
     .sort((left, right) => right.score - left.score || left.index - right.index);
 
-  const completeResults = results.filter(
+  const corroboratedResults = requireLexicalCorroboration
+    ? results.filter(
+        (result) =>
+          [...result.contentTerms].filter((term) => queryTerms.includes(term))
+            .length >= minimumChunkMatches,
+      )
+    : results;
+
+  // Embeddings can recognize a genuine synonym-only match. Keep this path
+  // deliberately stricter than ordinary retrieval and return only the single
+  // strongest passage; weak semantic similarity never bypasses lexical checks.
+  if (
+    requireLexicalCorroboration &&
+    corroboratedResults.length === 0
+  ) {
+    const semanticOnlyMatch = results.find(
+      (result) =>
+        result.score >= MINIMUM_UNCORROBORATED_SIMILARITY &&
+        result.contentTerms.size >= 2,
+    );
+    return semanticOnlyMatch
+      ? [{
+          chunk: semanticOnlyMatch.chunk,
+          score: semanticOnlyMatch.score,
+          index: semanticOnlyMatch.index,
+          start: semanticOnlyMatch.start,
+          end: semanticOnlyMatch.end,
+          pageNumbers: semanticOnlyMatch.pageNumbers,
+        }]
+      : [];
+  }
+
+  const completeResults = corroboratedResults.filter(
     (result) =>
       queryTerms.every((term) => result.contentTerms.has(term)),
   );
-  const selected = (completeResults.length > 0 ? completeResults : results)
+  const selected = (completeResults.length > 0 ? completeResults : corroboratedResults)
     .slice(0, options.maxResults ?? 3);
   const coverageSelected =
     completeResults.length > 0 || !requireLexicalCorroboration
@@ -465,6 +495,7 @@ function getPageNumbers(
 
 async function getCachedDocumentEmbeddings(
   cacheKey: string,
+  model: string,
   texts: string[],
   embedder: EmbeddingBatch,
 ): Promise<number[][]> {
@@ -476,14 +507,34 @@ async function getCachedDocumentEmbeddings(
     return cached;
   }
 
-  cached = embedder(texts, "RETRIEVAL_DOCUMENT");
+  cached = (async () => {
+    // Only the production Gemini embedder uses the durable store. Injected
+    // test/custom embedders remain isolated and deterministic.
+    if (embedder === generateEmbeddings) {
+      const stored = await loadDocumentEmbeddings(cacheKey, model, texts);
+      if (stored) return stored;
+    }
+
+    const vectors = await embedder(texts, "RETRIEVAL_DOCUMENT");
+    if (embedder === generateEmbeddings) {
+      const persisted = await saveDocumentEmbeddings(
+        cacheKey,
+        model,
+        texts,
+        vectors,
+      );
+      if (!persisted && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.warn("[retrieval] durable vector storage unavailable; using process cache");
+      }
+    }
+    return vectors;
+  })();
+
   documentEmbeddingCache.set(cacheKey, cached);
 
   while (documentEmbeddingCache.size > MAX_CACHED_DOCUMENTS) {
     const oldestKey = documentEmbeddingCache.keys().next().value;
-    if (oldestKey) {
-      documentEmbeddingCache.delete(oldestKey);
-    }
+    if (oldestKey) documentEmbeddingCache.delete(oldestKey);
   }
 
   try {
