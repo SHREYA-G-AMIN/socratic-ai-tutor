@@ -217,6 +217,7 @@ GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The student asked for a diagram and no relev
 
     return NextResponse.json({
       ...tutorResponse,
+      diagramIsGeneral: Boolean(generalDiagramRequest && tutorResponse.diagramData),
       sources,
       retrievalMode,
       ...(warning ? { warning } : {}),
@@ -357,8 +358,11 @@ async function generateTutorReply(
 
 
 function isGeneralDiagramRequest(message: string): boolean {
-  return /\\b(?:general|in general|on your own|by yourself|outside (?:the )?(?:document|pdf|material)|not (?:from|based on) (?:the )?(?:document|pdf|material)|use (?:your )?(?:general )?knowledge)\\b/i.test(message) &&
-    /\\b(?:diagram|draw|visual|flowchart|concept map)\\b/i.test(message);
+  const explicitlyGeneral =
+    /\b(?:general|in general|on (?:your|ur) own|by yourself|outside (?:the )?(?:document|pdf|material)|not (?:from|based on) (?:the )?(?:document|pdf|material)|use (?:your )?(?:general )?knowledge)\b/i.test(message);
+  const asksForDiagram =
+    /\b(?:diagrams?|daigrams?|draw|visual|flowchart|concept map)\b/i.test(message);
+  return explicitlyGeneral && asksForDiagram;
 }
 
 function parsePageRanges(
