@@ -619,7 +619,7 @@ test("semantic retrieval accepts a high-confidence synonym-only passage", async 
 
   const results = await retrieveSemanticallyRelevantChunks(
     chunks,
-    "How does fast movement affect an object's location?",
+    "How does swift travel alter an item's whereabouts?",
     { embedder, model: "test-synonym-only-retrieval-model" },
   );
 
@@ -640,7 +640,7 @@ test("semantic-only retrieval still rejects a weak embedding match", async () =>
 
   const results = await retrieveSemanticallyRelevantChunks(
     chunks,
-    "How does fast movement affect an object's location?",
+    "How does swift travel alter an item's whereabouts?",
     { embedder, model: "test-weak-synonym-retrieval-model" },
   );
 
