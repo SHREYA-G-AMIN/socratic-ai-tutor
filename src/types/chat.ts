@@ -14,6 +14,7 @@ export interface ChatResponse {
   reply: string;
   diagram?: string;
   diagramData?: DiagramData;
+  diagramIsGeneral?: boolean;
   sources: ChatSourceReference[];
   retrievalMode: "semantic" | "keyword";
   warning?: string;
