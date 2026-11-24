@@ -20,14 +20,12 @@ export async function recognizeScannedPdf(
   bytes: Uint8Array,
   pageCount: number,
   fetcher: typeof fetch = fetch,
-  pageNumbers: number[] = Array.from({ length: pageCount }, (_, index) => index + 1),
-): Promise<{ text: string; pageRanges: DocumentPageRange[]; truncated: boolean; pageTexts: string[] }> {
+  pageNumbers: number[] = Array.from({ length: pageCount }, (_, index) => index + 1)): Promise<{ text: string; pageRanges: DocumentPageRange[]; truncated: boolean; pageTexts: string[] }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new DocumentProcessingError(
       "OCR_UNAVAILABLE",
-      "This PDF appears to be scanned. Set GEMINI_API_KEY on the server to enable OCR.",
-    );
+      "This PDF appears to be scanned. Set GEMINI_API_KEY on the server to enable OCR.");
   }
 
   const model = process.env.GEMINI_OCR_MODEL?.trim() || DEFAULT_OCR_MODEL;
@@ -70,21 +68,17 @@ export async function recognizeScannedPdf(
           },
         }),
         signal: AbortSignal.timeout(OCR_TIMEOUT_MS),
-      },
-    );
+      });
   } catch {
     throw new DocumentProcessingError(
       "OCR_FAILED",
-      "OCR could not process this scanned PDF. Please try a clearer or smaller PDF.",
-    );
+      "OCR could not process this scanned PDF. Please try a clearer or smaller PDF.");
   }
 
   if (!response.ok) {
     throw new DocumentProcessingError(
       "OCR_FAILED",
-      "The OCR service could not process this PDF. Please try again later.",
-      502,
-    );
+      "The OCR service could not process this PDF. Please try again later.");
   }
 
   let payload: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
@@ -120,8 +114,7 @@ export async function recognizeScannedPdf(
         (page as OcrPage).pageNumber >= 1 &&
         (page as OcrPage).pageNumber <= pageCount &&
         pageNumbers.includes((page as OcrPage).pageNumber) &&
-        typeof (page as OcrPage).text === "string",
-      )
+        typeof (page as OcrPage).text === "string")
       .sort((left, right) => left.pageNumber - right.pageNumber);
   } catch {
     throw new DocumentProcessingError("OCR_FAILED", "The OCR service returned unreadable page data.");
@@ -135,8 +128,7 @@ export async function recognizeScannedPdf(
   if (!joined.text) {
     throw new DocumentProcessingError(
       "NO_TEXT_CONTENT",
-      "No readable text could be recognized in this scanned PDF.",
-    );
+      "No readable text could be recognized in this scanned PDF.");
   }
   return { ...joined, pageTexts: normalizedPages };
 }
