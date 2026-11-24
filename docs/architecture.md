@@ -13,8 +13,8 @@ The main goal is to ensure that answers are based on uploaded study materials an
 - **Backend:** Next.js Route Handlers
 - **Tutor generation:** Gemini `gemini-3.5-flash-lite`
 - **Embeddings:** Gemini `gemini-embedding-001`, configurable with `GEMINI_EMBEDDING_MODEL`
-- **PDF processing:** `unpdf`
-- **Retrieval:** Cosine similarity with an in-memory embedding cache and keyword fallback
+- **PDF processing:** `unpdf` with Gemini PDF vision OCR fallback
+- **Retrieval:** Cosine similarity with Supabase-backed embedding persistence and an in-memory cache fallback
 - **Diagrams:** Mermaid 12, rendered in the browser
 
 The Gemini embedding integration is server-side and reads `GEMINI_API_KEY`; the
@@ -160,7 +160,7 @@ for the source chunk.
 - Confusion cues adapt teaching style and never diagnose a student's emotional state.
 - Students should be able to request simpler explanations directly.
 - API keys must remain on the server and must not be exposed in frontend code.
-- Uploaded files should be validated and handled securely.
+- Uploaded files should be validated and handled securely. OCR and embedding credentials must remain server-only.
 
 ## 6. Current Project Structure
 
