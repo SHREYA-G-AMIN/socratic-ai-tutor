@@ -170,6 +170,37 @@ export function validateDiagramStructure(value: unknown): DiagramData | null {
   };
 }
 
+export function validateGeneralDiagram(value: unknown): DiagramData | null {
+  if (!isRecord(value) || !hasExactKeys(value, ["type", "direction", "nodes", "edges"])) {
+    return null;
+  }
+  if (
+    (value.type !== "flowchart" && value.type !== "concept") ||
+    (value.direction !== "TD" && value.direction !== "LR") ||
+    !Array.isArray(value.nodes) ||
+    value.nodes.length < 2 ||
+    value.nodes.length > MAX_DIAGRAM_NODES ||
+    !Array.isArray(value.edges) ||
+    value.edges.length < 1 ||
+    value.edges.length > MAX_DIAGRAM_EDGES
+  ) return null;
+
+  const normalized = {
+    type: value.type,
+    direction: value.direction,
+    nodes: value.nodes.map((node) => {
+      if (!isRecord(node) || !hasExactKeys(node, ["id", "label"])) return null;
+      return { ...node, sourceIndex: 1, evidence: String(node.label ?? "") };
+    }),
+    edges: value.edges.map((edge) => {
+      if (!isRecord(edge) || !hasExactKeys(edge, ["from", "to", "label"])) return null;
+      return { ...edge, sourceIndex: 1, evidence: String(edge.label ?? "") };
+    }),
+  };
+  if (normalized.nodes.some((node) => node === null) || normalized.edges.some((edge) => edge === null)) return null;
+  return validateDiagramStructure(normalized);
+}
+
 export function validateGroundedDiagram(
   value: unknown,
   passages: string[],
@@ -259,7 +290,7 @@ export function parseTutorResponse(
       try {
         const parsed: unknown = JSON.parse(content);
         const validated = options.allowUngroundedDiagram
-          ? validateDiagramStructure(parsed)
+          ? validateGeneralDiagram(parsed)
           : validateGroundedDiagram(parsed, options.sourcePassages ?? []);
         if (!validated) {
           invalidDiagram = true;
