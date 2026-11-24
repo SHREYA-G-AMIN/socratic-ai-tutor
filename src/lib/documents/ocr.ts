@@ -4,7 +4,7 @@ import { DocumentProcessingError } from "./errors";
 import type { DocumentPageRange } from "@/types/document";
 
 const GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_OCR_MODEL = "gemini-2.5-flash";
+const DEFAULT_OCR_MODEL = "gemini-3.8-flash";
 const OCR_TIMEOUT_MS = 45_000;
 const MAX_PROVIDER_ERROR_LENGTH = 500;
 
@@ -39,13 +39,13 @@ export async function recognizeScannedPdf(
     );
   }
 
-  // Accept both "gemini-2.5-flash" and "models/gemini-2.5-flash" in env files.
+  // Accept both "gemini-3.8-flash" and "models/gemini-3.8-flash" in env files.
   const configuredModel = process.env.GEMINI_OCR_MODEL?.trim() || DEFAULT_OCR_MODEL;
   const model = configuredModel.replace(/^models\//, "");
   if (!/^[a-zA-Z0-9._-]+$/.test(model)) {
     throw new DocumentProcessingError(
       "OCR_UNAVAILABLE",
-      "GEMINI_OCR_MODEL is invalid. Use a Gemini model name such as gemini-2.5-flash.",
+      "GEMINI_OCR_MODEL is invalid. Use a Gemini model name such as gemini-3.8-flash.",
     );
   }
 
@@ -199,7 +199,7 @@ function describeProviderFailure(status: number): string {
     return "Gemini rejected the API key. Check that GEMINI_API_KEY is valid and that the Gemini API is enabled for its project.";
   }
   if (status === 404) {
-    return "The configured Gemini OCR model was not found. Check GEMINI_OCR_MODEL or remove it to use the default model.";
+    return "The configured Gemini OCR model is unavailable or has been retired. Set GEMINI_OCR_MODEL to a currently supported model, such as gemini-3.8-flash.";
   }
   if (status === 429) {
     return "Gemini OCR quota or rate limit was reached. Wait briefly and try again.";
