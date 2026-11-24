@@ -153,7 +153,7 @@ test("inline json code responses are normalized and parsed as general diagrams",
     ],
   };
   const parsed = parseTutorResponse(
-    `A general explanation.\\n\\n\x60json ${JSON.stringify(generalDiagram)} \x60`,
+    `A general explanation.\n\n\x60json ${JSON.stringify(generalDiagram)} \x60`,
     {
       allowDiagram: true,
       requireDiagram: true,
