@@ -1,6 +1,6 @@
 import "server-only";
 import { createWorker } from "tesseract.js";
-import { renderPageAsImage, type PDFDocumentProxy } from "unpdf";
+import { getDocumentProxy, renderPageAsImage } from "unpdf";
 import { DocumentProcessingError } from "./errors";
 import type { DocumentPageRange } from "@/types/document";
 
@@ -8,7 +8,7 @@ const MAX_OCR_CHARACTERS = 500_000;
 
 /** Rasterizes selected PDF pages in memory and recognizes them with local Tesseract. */
 export async function recognizeScannedPdfLocally(
-  document: PDFDocumentProxy,
+  document: Awaited<ReturnType<typeof getDocumentProxy>>,
   pageCount: number,
   pageNumbers: number[],
 ): Promise<{ text: string; pageRanges: DocumentPageRange[]; truncated: boolean; pageTexts: string[] }> {
