@@ -31,7 +31,6 @@ export async function recognizeScannedPdfLocally(
       const image = await renderPageAsImage(document, pageNumber, {
         canvasImport: () => import("@napi-rs/canvas"),
         scale: 2,
-        format: "png",
       });
       const result = await worker.recognize(image);
       pageTexts[pageNumber - 1] = result.data.text;
