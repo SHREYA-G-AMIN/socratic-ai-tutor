@@ -9,6 +9,7 @@ import {
   MAX_PDF_PAGES,
 } from "./constants";
 import { DocumentProcessingError } from "./errors";
+import { recognizeScannedPdf } from "./ocr";
 import type { DocumentPageRange } from "@/types/document";
 
 export interface PdfExtraction {
