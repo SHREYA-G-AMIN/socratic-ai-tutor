@@ -185,20 +185,22 @@ export function validateGeneralDiagram(value: unknown): DiagramData | null {
     value.edges.length > MAX_DIAGRAM_EDGES
   ) return null;
 
+  const rawNodes = value.nodes as unknown[];
+  const rawEdges = value.edges as unknown[];
   const normalized = {
     type: value.type,
     direction: value.direction,
-    nodes: value.nodes.map((node) => {
+    nodes: rawNodes.map((node) => {
       if (!isRecord(node) || !hasExactKeys(node, ["id", "label"])) return null;
       return { ...node, sourceIndex: 1, evidence: String(node.label ?? "") };
     }),
-    edges: value.edges.map((edge) => {
+    edges: rawEdges.map((edge) => {
       if (!isRecord(edge) || !hasExactKeys(edge, ["from", "to", "label"])) return null;
       const from = value.nodes.find(
-        (node) => isRecord(node) && node.id === edge.from,
+        (node: unknown) => isRecord(node) && node.id === edge.from,
       );
       const to = value.nodes.find(
-        (node) => isRecord(node) && node.id === edge.to,
+        (node: unknown) => isRecord(node) && node.id === edge.to,
       );
       if (!isRecord(from) || !isRecord(to)) return null;
       return {
@@ -208,7 +210,7 @@ export function validateGeneralDiagram(value: unknown): DiagramData | null {
       };
     }),
   };
-  if (normalized.nodes.some((node) => node === null) || normalized.edges.some((edge) => edge === null)) return null;
+  if (normalized.nodes.some((node: unknown) => node === null) || normalized.edges.some((edge: unknown) => edge === null)) return null;
   return validateDiagramStructure(normalized);
 }
 
