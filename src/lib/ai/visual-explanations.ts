@@ -224,6 +224,7 @@ export function parseTutorResponse(
   options: {
     allowDiagram?: boolean;
     requireDiagram?: boolean;
+    allowUngroundedDiagram?: boolean;
     sourcePassages?: string[];
   } = {},
 ): ParsedTutorResponse {
@@ -257,10 +258,9 @@ export function parseTutorResponse(
 
       try {
         const parsed: unknown = JSON.parse(content);
-        const validated = validateGroundedDiagram(
-          parsed,
-          options.sourcePassages ?? [],
-        );
+        const validated = options.allowUngroundedDiagram
+          ? validateDiagramStructure(parsed)
+          : validateGroundedDiagram(parsed, options.sourcePassages ?? []);
         if (!validated) {
           invalidDiagram = true;
         } else {
