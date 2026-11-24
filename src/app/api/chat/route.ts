@@ -68,7 +68,6 @@ export async function POST(request: Request) {
     const currentMessage = message.trim();
     const intent = detectTutoringIntent(currentMessage);
     const history = parseChatHistory(body.history);
-    const generalDiagramRequest = isGeneralDiagramRequest(currentMessage, history);
     const retrievalMessage = buildRetrievalMessage(currentMessage, history);
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -152,6 +151,11 @@ export async function POST(request: Request) {
       score: result.score,
     }));
 
+    const diagramRequest = getDiagramRequest(currentMessage);
+    const generalDiagramRequest =
+      isGeneralDiagramRequest(currentMessage) ||
+      (diagramRequest === "required" && history.length > 0 && sources.length === 0);
+
     if (sources.length === 0 && !generalDiagramRequest) {
       return NextResponse.json({
         reply:
@@ -188,17 +192,16 @@ export async function POST(request: Request) {
         text: turn.parts.map((part) => part.text).join(""),
       })),
     );
-    const diagramRequest = getDiagramRequest(currentMessage);
     const baseInstructions = getTutorInstructions(
       intent,
       confusion.severity,
       diagramRequest,
-      sources.length > 0,
+      sources.length > 0 || generalDiagramRequest,
     );
     const tutorInstructions = generalDiagramRequest
       ? `${baseInstructions}
 
-GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The student explicitly asked for a general diagram rather than one limited to the uploaded document. This overrides the document-only restriction for the diagram only. Use reliable general knowledge to draw a simple, accurate diagram of the topic established by the recent conversation. Do not pretend its content came from the PDF, do not add document citations, and clearly label it as a general explanation. Return the required diagram-json block using the normal schema. Keep any prose brief.`
+GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The student asked for a diagram and no relevant document passages were found, or explicitly asked you to use general knowledge. For the diagram only, use reliable general knowledge about the topic in the recent conversation. Do not claim it came from the PDF and do not cite the PDF. Clearly label it as a general explanation. Return exactly one diagram-json block with strict JSON and exactly this shape: {"type":"flowchart"|"concept","direction":"TD"|"LR","nodes":[{"id":"user","label":"User"}],"edges":[{"from":"user","to":"application","label":"uses"}]}. Use 2-12 nodes and 1-20 edges. Node objects must contain only id and label; edge objects only from, to, and label. Labels must be concise, factual, and safe for Mermaid. Do not include sourceIndex or evidence fields. Do not omit the diagram block. Keep prose brief.`
       : baseInstructions;
     const generatedResponse = await generateTutorReply(
       apiKey,
@@ -353,16 +356,9 @@ async function generateTutorReply(
 }
 
 
-function isGeneralDiagramRequest(
-  message: string,
-  history: GeminiHistoryMessage[],
-): boolean {
-  const explicitlyGeneral =
-    /\b(?:general|in general|outside (?:the )?(?:document|pdf|material)|not (?:from|based on) (?:the )?(?:document|pdf|material)|use (?:your )?(?:general )?knowledge)\b/i.test(
-      message,
-    );
-  const asksForDiagram = /\b(?:diagram|draw|visual|flowchart|concept map)\b/i.test(message);
-  return explicitlyGeneral && asksForDiagram && history.length > 0;
+function isGeneralDiagramRequest(message: string): boolean {
+  return /\\b(?:general|in general|on your own|by yourself|outside (?:the )?(?:document|pdf|material)|not (?:from|based on) (?:the )?(?:document|pdf|material)|use (?:your )?(?:general )?knowledge)\\b/i.test(message) &&
+    /\\b(?:diagram|draw|visual|flowchart|concept map)\\b/i.test(message);
 }
 
 function parsePageRanges(
