@@ -115,3 +115,37 @@ test("student evidence is considered while tutor turns are not counted as failur
   assert.equal(assessment.severity, "mild");
   assert.deepEqual(assessment.signals, ["simplification-request"]);
 });
+
+
+test("natural-language paraphrases of confusion are recognized", () => {
+  for (const message of [
+    "I can't wrap my head around this.",
+    "This explanation is not clicking for me.",
+    "I'm struggling to follow the steps.",
+    "I keep mixing these two ideas up.",
+  ]) {
+    const assessment = detectConfusion(message);
+    assert.equal(assessment.severity, "moderate", message);
+    assert.ok(assessment.signals.includes("explicit-confusion"), message);
+  }
+});
+
+test("semantically similar reworded questions count as repeated questions", () => {
+  const assessment = detectConfusion("What causes this reaction to occur?", [
+    { role: "student", text: "Why does this reaction happen?" },
+    { role: "tutor", text: "The passage describes the reaction." },
+  ]);
+
+  assert.equal(assessment.severity, "moderate");
+  assert.ok(assessment.signals.includes("repeated-question"));
+});
+
+test("similarity matching does not flag unrelated questions as repetitions", () => {
+  const assessment = detectConfusion("How do plants store energy?", [
+    { role: "student", text: "Why does this reaction happen?" },
+    { role: "tutor", text: "The passage describes the reaction." },
+  ]);
+
+  assert.equal(assessment.severity, "none");
+  assert.ok(!assessment.signals.includes("repeated-question"));
+});
