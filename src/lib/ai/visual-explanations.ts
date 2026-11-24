@@ -196,10 +196,10 @@ export function validateGeneralDiagram(value: unknown): DiagramData | null {
     }),
     edges: rawEdges.map((edge) => {
       if (!isRecord(edge) || !hasExactKeys(edge, ["from", "to", "label"])) return null;
-      const from = value.nodes.find(
+      const from = rawNodes.find(
         (node: unknown) => isRecord(node) && node.id === edge.from,
       );
-      const to = value.nodes.find(
+      const to = rawNodes.find(
         (node: unknown) => isRecord(node) && node.id === edge.to,
       );
       if (!isRecord(from) || !isRecord(to)) return null;
