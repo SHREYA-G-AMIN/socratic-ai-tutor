@@ -42,7 +42,7 @@ const MAX_DIAGRAM_LABEL_LENGTH = 100;
 const MAX_EVIDENCE_LENGTH = 500;
 
 const EXPLICIT_DIAGRAM_REQUEST =
-  /\b(?:diagram|flowchart|concept map|process map|visual(?:ly|ization|isation)?|draw|map out)\b/i;
+  /\b(?:diagrams?|daigrams?|flowchart|concept map|process map|visual(?:ly|ization|isation)?|draw(?:\s+(?:one|it|a))?|map out)\b/i;
 const DIAGRAM_WORTHY_QUESTION =
   /\b(?:steps?|stages?|sequence|process|cycle|workflow|pathway|life cycle|relationship between|how (?:does|do|is|are)\b.*\bwork)\b/i;
 const DIAGRAM_BLOCK = /```(diagram-json|mermaid)\s*\r?\n([\s\S]*?)```/gi;
