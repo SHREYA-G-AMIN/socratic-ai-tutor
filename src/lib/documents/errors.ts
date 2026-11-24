@@ -20,6 +20,8 @@ const STATUS_BY_CODE: Record<DocumentUploadErrorCode, number> = {
   TOO_MANY_PAGES: 422,
   // Something on the server went wrong.
   EXTRACTION_FAILED: 500,
+  OCR_UNAVAILABLE: 503,
+  OCR_FAILED: 502,
 };
 
 /**
