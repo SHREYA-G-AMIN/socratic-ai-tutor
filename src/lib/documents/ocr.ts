@@ -55,6 +55,11 @@ export async function recognizeScannedPdf(
     throw new DocumentProcessingError("OCR_FAILED", "The scanned PDF page selection is invalid.");
   }
 
+  const pdfBase64 = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64");
+  if (bytes.byteLength === 0 || pdfBase64.length === 0) {
+    throw new DocumentProcessingError("OCR_FAILED", "The uploaded PDF data is empty. Please upload the PDF again.");
+  }
+
   const requestBody = JSON.stringify({
     contents: [{
       role: "user",
@@ -71,9 +76,10 @@ export async function recognizeScannedPdf(
           ].join("\n"),
         },
         {
-          inlineData: {
-            mimeType: "application/pdf",
-            data: Buffer.from(bytes).toString("base64"),
+          // The Gemini REST API uses snake_case for inline file payload fields.
+          inline_data: {
+            mime_type: "application/pdf",
+            data: pdfBase64,
           },
         },
       ],
@@ -119,6 +125,8 @@ export async function recognizeScannedPdf(
     console.error("[documents/ocr] Gemini rejected OCR request", {
       status: response.status,
       model,
+      pdfBytes: bytes.byteLength,
+      encodedPdfCharacters: pdfBase64.length,
       message: redactSecret(providerMessage, apiKey).slice(0, MAX_PROVIDER_ERROR_LENGTH),
     });
     throw new DocumentProcessingError("OCR_FAILED", describeProviderFailure(response.status));
