@@ -24,7 +24,7 @@ const ERROR_TITLES: Record<DocumentUploadErrorCode, string> = {
   OCR_FAILED: "Could not recognize scanned pages",
 };
 
-const UPLOAD_TIMEOUT_MS = 60_000;
+const UPLOAD_TIMEOUT_MS = 90_000;
 
 export interface PdfUploaderProps {
   onUploaded?: (document: DocumentUploadSuccessData) => void;
