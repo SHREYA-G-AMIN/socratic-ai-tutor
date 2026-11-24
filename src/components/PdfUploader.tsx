@@ -20,6 +20,8 @@ const ERROR_TITLES: Record<DocumentUploadErrorCode, string> = {
   NO_TEXT_CONTENT: "No readable text",
   TOO_MANY_PAGES: "Too many pages",
   EXTRACTION_FAILED: "Could not process the file",
+  OCR_UNAVAILABLE: "Scanned PDF OCR is not configured",
+  OCR_FAILED: "Could not recognize scanned pages",
 };
 
 const UPLOAD_TIMEOUT_MS = 60_000;
