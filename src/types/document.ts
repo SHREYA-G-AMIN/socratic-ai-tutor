@@ -15,7 +15,9 @@ export type DocumentUploadErrorCode =
   | "PDF_PARSE_FAILED"
   | "NO_TEXT_CONTENT"
   | "TOO_MANY_PAGES"
-  | "EXTRACTION_FAILED";
+  | "EXTRACTION_FAILED"
+  | "OCR_UNAVAILABLE"
+  | "OCR_FAILED";
 
 export interface DocumentPageRange {
   /** One-based PDF page number reported by the PDF parser. */
