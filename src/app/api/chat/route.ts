@@ -152,9 +152,14 @@ export async function POST(request: Request) {
     }));
 
     const diagramRequest = getDiagramRequest(currentMessage);
+    const documentOnlyDiagramRequest =
+      isDocumentOnlyDiagramRequest(currentMessage);
     const generalDiagramRequest =
-      isGeneralDiagramRequest(currentMessage) ||
-      (diagramRequest === "required" && history.length > 0 && sources.length === 0);
+      !documentOnlyDiagramRequest &&
+      (isGeneralDiagramRequest(currentMessage) ||
+        (diagramRequest === "required" &&
+          history.length > 0 &&
+          sources.length === 0));
 
     if (sources.length === 0 && !generalDiagramRequest) {
       return NextResponse.json({
@@ -426,6 +431,20 @@ function normalizeGeneralDiagramResponse(response: string): string {
   } catch {
     return response;
   }
+}
+
+function isDocumentOnlyDiagramRequest(message: string): boolean {
+  return (
+    /\\b(?:based|drawn|generated)\\s+only\\s+on\\s+(?:the\\s+)?(?:my\\s+)?(?:uploaded\\s+)?(?:document|pdf|material)\\b/i.test(
+      message,
+    ) ||
+    /\\buse\\s+only\\s+(?:the\\s+)?(?:my\\s+)?(?:uploaded\\s+)?(?:document|pdf|material)\\b/i.test(
+      message,
+    ) ||
+    /\\bonly\\s+from\\s+(?:the\\s+)?(?:my\\s+)?(?:uploaded\\s+)?(?:document|pdf|material)\\b/i.test(
+      message,
+    )
+  );
 }
 
 function isGeneralDiagramRequest(message: string): boolean {
