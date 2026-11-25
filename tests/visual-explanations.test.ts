@@ -187,6 +187,31 @@ test("general diagrams tolerate optional provenance fields from the model", () =
   assert.match(parsed.diagram ?? "", /managed by/);
 });
 
+test("fenced JSON diagram responses render and SVG artifacts stay out of chat prose", () => {
+  const generalDiagram = {
+    type: "concept",
+    direction: "LR",
+    nodes: [
+      { id: "users", label: "End Users" },
+      { id: "os", label: "Operating System" },
+      { id: "hardware", label: "Computer Hardware" },
+    ],
+    edges: [
+      { from: "users", to: "os", label: "interacts with" },
+      { from: "os", to: "hardware", label: "manages" },
+    ],
+  };
+  const parsed = parseTutorResponse(
+    `Here is a general-knowledge diagram.\n\n\x60\x60\x60json\n${JSON.stringify(generalDiagram)}\n\x60\x60\x60\n\n**svg**`,
+    { allowDiagram: true, requireDiagram: true, allowUngroundedDiagram: true },
+  );
+
+  assert.equal(parsed.diagramData?.nodes.length, 3);
+  assert.match(parsed.diagram ?? "", /interacts with/);
+  assert.doesNotMatch(parsed.reply, /\\*\\*svg\\*\\*/i);
+  assert.doesNotMatch(parsed.reply, /<svg/i);
+});
+
 test("malformed JSON and schema violations are safely omitted", () => {
   const malformed = parseTutorResponse(
     "Summary.\n```diagram-json\n{broken json\n```",
