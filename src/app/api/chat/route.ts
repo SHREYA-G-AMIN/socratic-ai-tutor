@@ -304,11 +304,68 @@ GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The requested topic or worked-example detail
       sourcePassages: sources.map((source) => source.text),
     });
 
+    const previousMessages = Array.isArray(body.history)
+      ? body.history.filter((item) =>
+          item && typeof item === "object" &&
+          ["student", "tutor", "hint"].includes(String((item as { role?: unknown }).role)) &&
+          typeof (item as { text?: unknown }).text === "string"
+        ).slice(-198)
+      : [];
+    const savedMessages = [
+      ...previousMessages,
+      { role: "student", text: currentMessage },
+      {
+        role: "tutor",
+        text: tutorResponse.reply,
+        ...(tutorResponse.diagram ? { diagram: tutorResponse.diagram } : {}),
+        ...(tutorResponse.diagramData ? { diagramData: tutorResponse.diagramData } : {}),
+        sources,
+      },
+    ];
+    const firstStudentMessage = savedMessages.find((item) =>
+      item && typeof item === "object" && (item as { role?: string }).role === "student"
+    ) as { text?: string } | undefined;
+    const title = firstStudentMessage?.text?.trim().slice(0, 80) || "New conversation";
+    const requestedConversationId =
+      typeof body.conversationId === "string" ? body.conversationId : null;
+
+    let conversationId = requestedConversationId;
+    if (requestedConversationId) {
+      const { data: savedConversation, error: saveError } = await supabase
+        .from("conversations")
+        .update({ messages: savedMessages, title, updated_at: new Date().toISOString() })
+        .eq("id", requestedConversationId)
+        .eq("user_id", user.id)
+        .eq("document_id", document.id)
+        .select("id")
+        .maybeSingle();
+      if (saveError || !savedConversation) {
+        return NextResponse.json({ error: "Could not save this conversation" }, { status: 500 });
+      }
+    } else {
+      const { data: createdConversation, error: createError } = await supabase
+        .from("conversations")
+        .insert({
+          user_id: user.id,
+          document_id: document.id,
+          title,
+          messages: savedMessages,
+        })
+        .select("id")
+        .single();
+      if (createError || !createdConversation) {
+        console.error("[api/chat] conversation persistence failed", createError?.message);
+        return NextResponse.json({ error: "Your answer was generated but the conversation could not be saved" }, { status: 500 });
+      }
+      conversationId = createdConversation.id;
+    }
+
     return NextResponse.json({
       ...tutorResponse,
       diagramIsGeneral: Boolean(generalDiagramRequest && tutorResponse.diagramData),
       sources,
       retrievalMode,
+      conversationId,
       ...(warning ? { warning } : {}),
     } satisfies ChatResponse);
   } catch (error) {
