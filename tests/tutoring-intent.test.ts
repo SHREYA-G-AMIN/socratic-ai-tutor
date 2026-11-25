@@ -36,6 +36,9 @@ test("explicit explain, define, compare, and list requests use direct answers", 
   assert.match(instructions, /answer that request directly/i);
   assert.match(instructions, /do not ask a follow-up question/i);
   assert.match(instructions, /do not turn the response into a hint/i);
+  assert.match(instructions, /explicitly requests a beginner-friendly real-life analogy/i);
+  assert.match(instructions, /clearly labeled analogy/i);
+  assert.match(instructions, /keep the analogy separate from source facts/i);
 });
 
 test("ordinary learning questions preserve Socratic guidance", () => {
