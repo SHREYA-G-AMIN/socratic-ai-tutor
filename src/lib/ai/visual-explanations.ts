@@ -220,55 +220,6 @@ export function validateGroundedDiagram(
   return allSupported ? diagram : null;
 }
 
-function buildFallbackDiagramFromPassages(passages: string[]): DiagramData | null {
-  const joined = passages.join(" ").trim();
-  if (!joined) return null;
-
-  const nodes: DiagramNode[] = [
-    {
-      id: "first_law",
-      label: "First Law: Inertia",
-      sourceIndex: 1,
-      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
-    },
-    {
-      id: "second_law",
-      label: "Second Law: F = ma",
-      sourceIndex: 1,
-      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
-    },
-    {
-      id: "third_law",
-      label: "Third Law: Action & Reaction",
-      sourceIndex: 1,
-      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
-    },
-  ];
-
-  const edges: DiagramEdge[] = [
-    {
-      from: "first_law",
-      to: "second_law",
-      label: "unbalanced force changes motion",
-      sourceIndex: 1,
-      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
-    },
-    {
-      from: "second_law",
-      to: "third_law",
-      label: "paired interaction forces",
-      sourceIndex: 1,
-      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
-    },
-  ];
-
-  return {
-    type: "concept",
-    direction: "LR",
-    nodes,
-    edges,
-  };
-}
 
 export function diagramToMermaidSource(value: unknown): string | null {
   const diagram = validateDiagramStructure(value);
@@ -356,11 +307,7 @@ export function parseTutorResponse(
     options.requireDiagram &&
     (options.sourcePassages?.length ?? 0) > 0
   ) {
-    diagramData =
-      buildFallbackDiagramFromPassages(options.sourcePassages ?? []) ?? undefined;
-    if (diagramData) {
-      invalidDiagram = false;
-    }
+    // Never invent a generic diagram when the model output is missing or invalid.
   }
 
   let reply = cleanDiagramArtifacts(prose).trim().replace(/\n{3,}/g, "\n\n");
