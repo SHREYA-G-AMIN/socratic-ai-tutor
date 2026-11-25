@@ -35,12 +35,15 @@ const GEMINI_GENERATE_API =
 const GEMINI_REQUEST_TIMEOUT_MS = 60_000;
 
 class TutorProviderError extends Error {
+  readonly status: 502 | 503;
+
   constructor(
     message: string,
-    readonly status: 502 | 503,
+    status: 502 | 503,
   ) {
     super(message);
     this.name = "TutorProviderError";
+    this.status = status;
   }
 }
 
@@ -164,7 +167,6 @@ export async function POST(request: Request) {
             {
               maxResults: MAX_RETRIEVED_CHUNKS,
               pageRanges,
-              requireLexicalCorroboration: false,
             },
           );
         } catch {
@@ -177,7 +179,7 @@ export async function POST(request: Request) {
           );
         }
       }
-      if (relevant.length === 0) {
+      if (relevant.length === 0 && !priorContextQuery) {
         relevant = retrieveRelevantChunks(
           chunks,
           currentMessage,

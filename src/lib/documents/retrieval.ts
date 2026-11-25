@@ -12,7 +12,7 @@ import {
 } from "./embeddings";
 
 const MINIMUM_SEMANTIC_SIMILARITY = 0.35;
-const MINIMUM_UNCORROBORATED_SIMILARITY = 0.68;
+const MINIMUM_UNCORROBORATED_SIMILARITY = 0.78;
 const MAX_CACHED_DOCUMENTS = 2;
 const documentEmbeddingCache = new Map<string, Promise<number[][]>>();
 const NON_CONTENT_QUERY_TERMS = new Set([
@@ -159,11 +159,7 @@ export function retrieveRelevantChunks(
       const evidenceText = getEvidenceText(chunk.text);
       const contentTerms = new Set(getContentQueryTerms(evidenceText));
       const matchingTerms = new Set(
-        keywords.filter(
-          (keyword) =>
-            contentTerms.has(keyword) ||
-            scoreChunk(evidenceText, [keyword]) > 0,
-        ),
+        keywords.filter((keyword) => contentTerms.has(keyword)),
       );
 
       return {
@@ -182,15 +178,28 @@ export function retrieveRelevantChunks(
   const completeCandidates = candidates.filter(
     (result) => keywords.length > 0 && result.score === keywords.length,
   );
-  const results = (
+  const coverageCandidates =
     completeCandidates.length > 0
       ? completeCandidates
-      : selectCoverageResults(candidates, keywords, maxResults).length > 0
-        ? selectCoverageResults(candidates, keywords, maxResults)
-        : candidates
-  ).slice(0, maxResults);
+      : selectCoverageResults(candidates, keywords, maxResults);
+  const selectedCandidates =
+    completeCandidates.length > 0
+      ? coverageCandidates
+      : coverageCandidates.length > 0
+        ? coverageCandidates
+        : candidates;
 
-  return results.map((result) => ({
+  if (
+    options.minimumMatches !== 0 &&
+    keywords.length > 0 &&
+    !keywords.every((term) =>
+      selectedCandidates.some((result) => result.contentTerms.has(term)),
+    )
+  ) {
+    return [];
+  }
+
+  return selectedCandidates.slice(0, maxResults).map((result) => ({
     chunk: result.chunk,
     score: result.score,
     index: result.index,
@@ -223,6 +232,9 @@ export async function retrieveSemanticallyRelevantChunks(
   const queryTerms = getContentQueryTerms(message);
   const requireLexicalCorroboration =
     options.requireLexicalCorroboration ?? true;
+  if (requireLexicalCorroboration && queryTerms.length === 0) {
+    return [];
+  }
   const minimumChunkMatches = requireLexicalCorroboration
     ? Math.min(options.minimumContentMatches ?? 1, queryTerms.length)
     : 0;
@@ -329,6 +341,15 @@ export async function retrieveSemanticallyRelevantChunks(
             options.maxResults ?? 3,
           )
         : corroboratedResults.slice(0, options.maxResults ?? 3);
+
+  if (
+    requireLexicalCorroboration &&
+    !queryTerms.every((term) =>
+      coverageSelected.some((result) => result.contentTerms.has(term)),
+    )
+  ) {
+    return [];
+  }
 
   return coverageSelected.map((result) => ({
     chunk: result.chunk,

@@ -68,7 +68,7 @@ export function getDiagramInstructions(
     return `Do not include a diagram-json block in this response. Retrieved passages are the only allowed source for course-specific claims.`;
   }
 
-  const outputContract = `Return a fenced \`\`\`diagram-json block containing strict JSON with this shape: {"type":"flowchart"|"concept","direction":"TD"|"LR","nodes":[{"id":"stable_id","label":"short label","sourceIndex":1,"evidence":"short exact quote from passage"}],"edges":[{"from":"node_id","to":"node_id","label":"relationship","sourceIndex":1,"evidence":"short exact quote from passage"}]}. Passage indexes are 1-based and refer to the numbered Context Passages in the latest user request. Include 2-12 nodes and 1-20 labeled edges. Keep labels concise (under 80 chars) and use valid node IDs matching /^[A-Za-z][A-Za-z0-9_]{0,31}$/. Base all course facts on the retrieved passages. Design the diagram to answer the student's exact request, not merely name the topic. For a documented worked example, preserve its actual values and execution order. For a scheduling timeline, make one connected node per CPU time slice, label each with its process and duration (and cumulative time boundaries when derivable), then connect the slices chronologically. Do not replace a worked example or timeline with generic concept labels. Every node must participate in at least one edge unless it is an explicit start or end node. Use an exact, case-sensitive evidence quote in every evidence field.`;
+  const outputContract = `Return a fenced \`\`\`diagram-json block containing strict JSON with this shape: {"type":"flowchart"|"concept","direction":"TD"|"LR","nodes":[{"id":"stable_id","label":"short label","sourceIndex":1,"evidence":"short exact quote from passage"}],"edges":[{"from":"node_id","to":"node_id","label":"relationship","sourceIndex":1,"evidence":"short exact quote from passage"}]}. Passage indexes are 1-based and refer to the numbered Context Passages in the latest user request. Include 2-12 nodes and 1-20 labeled edges. Keep labels concise (under 80 chars) and use valid node IDs matching /^[A-Za-z][A-Za-z0-9_]{0,31}$/. Base all course facts on the retrieved passages. Design the diagram to answer the student's exact request, not merely name the topic. For a documented worked example, preserve its actual values and execution order. For a scheduling timeline, make one connected node per CPU time slice, label each with its process and duration (and cumulative time boundaries when derivable), then connect the slices chronologically. Do not replace a worked example or timeline with generic concept labels; use its actual values and steps, not generic concept labels. Every node must participate in at least one edge unless it is an explicit start or end node. Use an exact, case-sensitive evidence quote in every evidence field.`;
 
   if (request === "required") {
     return `The student explicitly requested a visual explanation. Choose "flowchart" for a documented sequence or process, or "concept" for documented concepts and relationships. ${outputContract}`;
@@ -177,6 +177,20 @@ export function validateDiagramStructure(value: unknown): DiagramData | null {
     return null;
   }
 
+  const connectedNodeIds = new Set(
+    edges.flatMap((edge) => [edge.from, edge.to]),
+  );
+  if (
+    nodes.some(
+      (node) =>
+        !connectedNodeIds.has(node.id) &&
+        !/^(?:start|end)(?:_node)?$/i.test(node.id) &&
+        !/^(?:start|end)(?: node)?$/i.test(node.label),
+    )
+  ) {
+    return null;
+  }
+
   return {
     type: value.type,
     direction: value.direction,
@@ -198,18 +212,22 @@ export function validateGroundedDiagram(
     return null;
   }
 
-  const normalizedPassages = passages.map((p) => normalizePhrase(p));
   const allSupported = [...diagram.nodes, ...diagram.edges].every((item) => {
     const labelNorm = normalizePhrase(item.label);
     const evidenceNorm = normalizePhrase(item.evidence);
     const targetPassage =
-      item.sourceIndex >= 1 && item.sourceIndex <= normalizedPassages.length
-        ? normalizedPassages[item.sourceIndex - 1]
+      item.sourceIndex >= 1 && item.sourceIndex <= passages.length
+        ? passages[item.sourceIndex - 1]
         : "";
 
     // Provenance must point to an exact quote in the cited passage, not merely
     // to a vaguely similar passage elsewhere in the retrieved context.
-    if (!evidenceNorm || !targetPassage.includes(evidenceNorm)) {
+    if (
+      !evidenceNorm ||
+      !normalizeWhitespace(targetPassage).includes(
+        normalizeWhitespace(item.evidence),
+      )
+    ) {
       return false;
     }
 
@@ -220,7 +238,20 @@ export function validateGroundedDiagram(
     return labelTerms.length > 0 && labelTerms.every((word) => evidenceTerms.has(word));
   });
 
-  return allSupported ? diagram : null;
+  const nodesById = new Map<string, DiagramNode>(
+    diagram.nodes.map((node) => [node.id, node]),
+  );
+  const relationshipsSupported = diagram.edges.every((edge) => {
+    const from = nodesById.get(edge.from);
+    const to = nodesById.get(edge.to);
+    return (
+      from !== undefined &&
+      to !== undefined &&
+      hasOrderedRelationship(from.label, edge.label, to.label, edge.evidence)
+    );
+  });
+
+  return allSupported && relationshipsSupported ? diagram : null;
 }
 
 
@@ -264,10 +295,15 @@ export function parseTutorResponse(
 
   const prose = response.replace(
     DIAGRAM_BLOCK,
-    (_block, content: string) => {
+    (block, content: string) => {
       const trimmed = content.trim();
+      if (/^```mermaid\b/i.test(block.trimStart())) {
+        invalidDiagram = true;
+        return "";
+      }
+
       if (!trimmed.startsWith("{")) {
-        return _block;
+        return block;
       }
 
       if (!allowDiagram) {
@@ -418,6 +454,50 @@ function isSourceIndex(value: unknown): value is number {
 
 function normalizePhrase(value: string): string {
   return value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function hasOrderedRelationship(
+  fromLabel: string,
+  relationshipLabel: string,
+  toLabel: string,
+  evidence: string,
+): boolean {
+  const tokens = evidence.toLocaleLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const findLabelEnd = (label: string, startAt: number): number | null => {
+    const terms = label
+      .toLocaleLowerCase()
+      .match(/[a-z0-9]+/g)
+      ?.filter((term) => term.length >= 3);
+    if (!terms || terms.length === 0) {
+      return null;
+    }
+
+    let cursor = startAt;
+    for (const term of terms) {
+      const position = tokens.indexOf(term, cursor);
+      if (position === -1) {
+        return null;
+      }
+      cursor = position + 1;
+    }
+    return cursor - 1;
+  };
+
+  const fromEnd = findLabelEnd(fromLabel, 0);
+  if (fromEnd === null) {
+    return false;
+  }
+
+  const relationshipEnd = findLabelEnd(relationshipLabel, fromEnd + 1);
+  if (relationshipEnd === null) {
+    return false;
+  }
+
+  return findLabelEnd(toLabel, relationshipEnd + 1) !== null;
 }
 
 function escapeMermaidLabel(value: string): string {

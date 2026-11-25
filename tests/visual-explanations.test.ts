@@ -239,6 +239,21 @@ test("malformed JSON and schema violations are safely omitted", () => {
     }),
     null,
   );
+  assert.equal(
+    validateDiagramStructure({
+      ...flowchart,
+      nodes: [
+        ...flowchart.nodes,
+        {
+          id: "orphan",
+          label: "orphan",
+          sourceIndex: 1,
+          evidence: flowchartPassage,
+        },
+      ],
+    }),
+    null,
+  );
 });
 
 test("unsupported node and relationship content is rejected", () => {
@@ -291,6 +306,19 @@ test("evidence must be an exact quote from the cited retrieved passage", () => {
         ...flowchart,
         nodes: [
           { ...flowchart.nodes[0], evidence: "The target is smaller." },
+          flowchart.nodes[1],
+        ],
+      },
+      [flowchartPassage],
+    ),
+    null,
+  );
+  assert.equal(
+    validateGroundedDiagram(
+      {
+        ...flowchart,
+        nodes: [
+          { ...flowchart.nodes[0], evidence: flowchartPassage.toLowerCase() },
           flowchart.nodes[1],
         ],
       },
