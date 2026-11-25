@@ -29,6 +29,8 @@ export interface DocumentPageRange {
 }
 
 export interface DocumentUploadSuccessData {
+  /** Supabase row id for this user's saved document. */
+  id: string;
   /** Original file name, as sent by the client. */
   fileName: string;
   /** Size of the uploaded file in bytes. */
