@@ -357,8 +357,7 @@ export async function renderMermaidSafely(
 
 function cleanDiagramArtifacts(value: string): string {
   return value
-    .replace(/\*\*\s*svg\s*\*\*/gi, "")
-    .replace(/^\s*(?:(?:\*\*|__)?(?:svg|svgHint)(?:\*\*|__)?\s*:?\s*)$/gim, "")
+    .replace(/^\s*(?:(?:\*\*|__)\s*)?(?:svgHint|svg)\s*(?:(?:\*\*|__)\s*)?:?\s*$/gim, "")
     .replace(/<svg\b[\s\S]*?<\/svg>/gi, "")
     .replace(/\n[ \t]+\n/g, "\n\n");
 }
