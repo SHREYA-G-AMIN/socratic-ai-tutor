@@ -122,7 +122,7 @@ export function MermaidDiagram({
       className={`min-w-0 overflow-auto rounded-lg bg-surface-elevated/40 ${expanded ? "min-h-0 flex-1" : "max-h-96"}`}
     >
       <div
-        className="inline-block min-w-full p-3 [&_svg]:block [&_svg]:h-auto [&_svg]:max-w-none [&_svg]:w-auto"
+        className="flex min-h-full w-max min-w-full justify-center p-3 [&_svg]:block [&_svg]:h-auto [&_svg]:max-w-none [&_svg]:w-auto"
         style={{ zoom }}
         dangerouslySetInnerHTML={{ __html: result?.kind === "rendered" ? result.svg : "" }}
       />
