@@ -359,7 +359,7 @@ test("overlong Mermaid source uses the text fallback without invoking the render
 
 test("internal SVG hints are removed from tutor-facing prose", () => {
   const parsed = parseTutorResponse(
-    "Here is the explanation.\\n\\n**svgHint**",
+    ["Here is the explanation.", "**svgHint**"].join("\n\n"),
     { allowDiagram: false },
   );
   assert.equal(parsed.reply, "Here is the explanation.");
