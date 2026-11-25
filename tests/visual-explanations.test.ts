@@ -208,7 +208,7 @@ test("fenced JSON diagram responses render and SVG artifacts stay out of chat pr
 
   assert.equal(parsed.diagramData?.nodes.length, 3);
   assert.match(parsed.diagram ?? "", /interacts with/);
-  assert.doesNotMatch(parsed.reply, /\\*\\*svg\\*\\*/i);
+  assert.doesNotMatch(parsed.reply, /\*\*svg\*\*/i);
   assert.doesNotMatch(parsed.reply, /<svg/i);
 });
 
