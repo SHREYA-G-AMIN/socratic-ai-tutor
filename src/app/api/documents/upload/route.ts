@@ -13,6 +13,7 @@ import type {
   DocumentUploadErrorResponse,
   DocumentUploadResponse,
 } from "@/types/document";
+import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
 
@@ -28,14 +29,44 @@ export const maxDuration = 60;
  */
 export async function POST(request: Request): Promise<Response> {
   try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return Response.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const formData = await parseFormData(request);
     const file = findUploadedFile(formData);
     const { file: upload, bytes } = await validatePdfUpload(file);
     const extraction = await extractPdfText(bytes);
+    const { data: savedDocument, error: saveError } = await supabase
+      .from("documents")
+      .insert({
+        user_id: user.id,
+        file_name: upload.name,
+        file_size_bytes: upload.size,
+        page_count: extraction.pageCount,
+        character_count: extraction.characterCount,
+        extracted_text: extraction.text,
+        page_ranges: extraction.pageRanges,
+        ocr_used: extraction.ocrUsed ?? false,
+        ocr_provider: extraction.ocrProvider ?? null,
+      })
+      .select("id")
+      .single();
+
+    if (saveError || !savedDocument) {
+      console.error("[api/documents/upload] metadata persistence failed", saveError?.message);
+      return Response.json(
+        toErrorBody(new DocumentProcessingError("EXTRACTION_FAILED", "The PDF was processed but could not be saved to your account. Please try again.")),
+        { status: 500 },
+      );
+    }
 
     const body: DocumentUploadResponse = {
       success: true,
       data: {
+        id: savedDocument.id,
         fileName: upload.name,
         fileSizeBytes: upload.size,
         pageCount: extraction.pageCount,
