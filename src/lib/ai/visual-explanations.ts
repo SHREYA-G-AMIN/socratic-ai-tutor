@@ -199,8 +199,6 @@ export function validateGroundedDiagram(
   }
 
   const normalizedPassages = passages.map((p) => normalizePhrase(p));
-  const combinedPassages = normalizedPassages.join(" ");
-
   const allSupported = [...diagram.nodes, ...diagram.edges].every((item) => {
     const labelNorm = normalizePhrase(item.label);
     const evidenceNorm = normalizePhrase(item.evidence);
