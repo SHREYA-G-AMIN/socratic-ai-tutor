@@ -127,6 +127,7 @@ export async function POST(request: Request) {
     }
 
     const pageRanges = parsePageRanges(document.page_ranges, documentText.length);
+    const cacheScope = `${user.id}:${document.id}`;
     const fileName = document.file_name;
 
     let retrievalMode: ChatResponse["retrievalMode"] = "semantic";
@@ -140,6 +141,7 @@ export async function POST(request: Request) {
         {
           maxResults: MAX_RETRIEVED_CHUNKS,
           pageRanges,
+          cacheScope,
           requireLexicalCorroboration: intent !== "summary",
         },
       );
@@ -187,6 +189,7 @@ export async function POST(request: Request) {
             {
               maxResults: MAX_RETRIEVED_CHUNKS,
               pageRanges,
+              cacheScope,
               requireLexicalCorroboration: false,
             },
           );
