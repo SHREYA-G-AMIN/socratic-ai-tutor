@@ -539,6 +539,8 @@ async function getCachedDocumentEmbeddings(
 
 function createDocumentCacheKey(texts: string[], model: string, scope?: string): string {
   return createHash("sha256")
+    .update(scope ?? "shared")
+    .update("\0")
     .update(model)
     .update("\0")
     .update(JSON.stringify(texts))
