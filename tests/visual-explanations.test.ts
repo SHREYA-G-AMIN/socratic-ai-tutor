@@ -357,6 +357,14 @@ test("overlong Mermaid source uses the text fallback without invoking the render
   assert.equal(invoked, false);
 });
 
+test("internal SVG hints are removed from tutor-facing prose", () => {
+  const parsed = parseTutorResponse(
+    "Here is the explanation.\\n\\n**svgHint**",
+    { allowDiagram: false },
+  );
+  assert.equal(parsed.reply, "Here is the explanation.");
+});
+
 test("structured diagram source escapes Mermaid control delimiters", () => {
   const quotedPassage =
     'If the target "value" is smaller than the current node, continue to the left child.';
