@@ -871,3 +871,37 @@ test("chat history is bounded to the latest twelve valid turns", async () => {
     });
   });
 });
+
+// A transient Gemini outage must be reported as a retryable service error,
+// not collapsed into an opaque internal-server error.
+test("returns a clear 503 when Gemini remains unavailable after retries", async () => {
+  await withApiKey("test-key", async () => {
+    let generationAttempts = 0;
+    await withFetch(async (input) => {
+      const url = String(input);
+      if (url.includes("batchEmbedContents")) {
+        return new Response("embedding provider unavailable", { status: 503 });
+      }
+      if (url.includes(":generateContent")) {
+        generationAttempts += 1;
+        return new Response("Gemini is temporarily unavailable", { status: 503 });
+      }
+      assert.fail(`unexpected provider request: ${url}`);
+    }, async () => {
+      const response = await POST(
+        makeRequest({
+          message: "Explain binary search trees",
+          documentText:
+            "A binary search tree stores keys. Values smaller than a node go into its left subtree, and larger values go into its right subtree.",
+        }),
+      );
+
+      assert.equal(response.status, 503);
+      assert.equal(generationAttempts, 3);
+      assert.deepEqual(await response.json(), {
+        error: "The AI tutor could not process the request. Please try again.",
+        code: "TUTOR_PROVIDER_ERROR",
+      });
+    });
+  });
+});
