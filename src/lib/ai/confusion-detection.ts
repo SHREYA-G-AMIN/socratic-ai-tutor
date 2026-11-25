@@ -26,9 +26,9 @@ const EXPLICIT_CONFUSION =
 const UNSUCCESSFUL_ATTEMPT =
   /\b(?:still (?:getting|got|have|don't|do not|can't|cannot)|tried (?:that|this)|didn't work|doesn't work|not working|wrong again|got it wrong|got the wrong answer|failed again)\b/i;
 const EXPLICIT_FRUSTRATION =
-  /\b(?:frustrat(?:ed|ing)|i give up|this is impossible|completely lost|nothing makes sense)\b/i;
+  /\b(?:frustrat(?:ed|ing)|i give up|this is impossible|completely lost|nothing makes sense|you keep explaining|same explanation|explaining it the same way|keeps? confusing me)\b/i;
 const STRONG_FRUSTRATION =
-  /\b(?:i give up|this is impossible|completely lost|nothing makes sense)\b/i;
+  /\b(?:i give up|this is impossible|completely lost|nothing makes sense|you keep explaining|explaining it the same way|same explanation)\b/i;
 const TUTOR_CORRECTION =
   /^(?:not quite\b|not exactly\b|incorrect\b|that's not correct\b|that is not correct\b|try again\b|let's rethink\b|let's revisit\b)/i;
 
