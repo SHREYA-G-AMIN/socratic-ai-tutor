@@ -141,6 +141,43 @@ export async function POST(request: Request) {
       );
     }
 
+    // If the student is answering or replying inside an ongoing Socratic turn
+    // and direct retrieval comes up empty, fall back to the prior topic context
+    // or document-order passages so the tutor can evaluate their answer.
+    if (relevant.length === 0 && history.length > 0 && isActiveTutorReply(currentMessage)) {
+      const priorContextQuery = getLastTopicQuery(history);
+      if (priorContextQuery) {
+        try {
+          relevant = await retrieveSemanticallyRelevantChunks(
+            chunks,
+            priorContextQuery,
+            {
+              maxResults: MAX_RETRIEVED_CHUNKS,
+              pageRanges,
+              requireLexicalCorroboration: false,
+            },
+          );
+        } catch {
+          relevant = retrieveRelevantChunks(
+            chunks,
+            priorContextQuery,
+            MAX_RETRIEVED_CHUNKS,
+            pageRanges,
+            { minimumMatches: 0 },
+          );
+        }
+      }
+      if (relevant.length === 0) {
+        relevant = retrieveRelevantChunks(
+          chunks,
+          currentMessage,
+          MAX_RETRIEVED_CHUNKS,
+          pageRanges,
+          { minimumMatches: 0 },
+        );
+      }
+    }
+
     const sources: ChatSourceReference[] = relevant.map((result) => ({
       fileName,
       chunkIndex: result.index,
@@ -249,15 +286,34 @@ interface GeminiHistoryMessage {
   parts: Array<{ text: string }>;
 }
 
+function isActiveTutorReply(message: string): boolean {
+  const isNewTopicQuestion =
+    /^(?:what|who|where|when|which|define|explain|compare|summarize|summarise)\b/i.test(
+      message.trim(),
+    ) && getContentQueryTerms(message).length >= 2;
+  return !isNewTopicQuestion;
+}
+
+function getLastTopicQuery(history: GeminiHistoryMessage[]): string | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const turn = history[i];
+    if (turn.role === "user") {
+      const text = turn.parts.map((part) => part.text).join("").trim();
+      if (getContentQueryTerms(text).length > 0) {
+        return text;
+      }
+    }
+  }
+  return null;
+}
+
 function buildRetrievalMessage(
   message: string,
   history: GeminiHistoryMessage[],
 ): string {
   const isContextDependentFollowUp =
-    getContentQueryTerms(message).length === 0 &&
-    /^(?:why|how|what about|explain|describe|elaborate|expand|clarify|tell me more)\b/i.test(
-      message,
-    );
+    /\b(?:hint|help|stuck|confused|clue|nudge|try again|due to|because)\b/i.test(message) ||
+    getContentQueryTerms(message).length <= 2;
 
   if (!isContextDependentFollowUp) {
     return message;
@@ -410,7 +466,6 @@ async function generateTutorReply(
 
   return reply;
 }
-
 
 function normalizeGeneralDiagramResponse(response: string): string {
   try {

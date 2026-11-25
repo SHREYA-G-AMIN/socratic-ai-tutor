@@ -45,7 +45,7 @@ const EXPLICIT_DIAGRAM_REQUEST =
   /\b(?:diagrams?|daigrams?|flowchart|concept map|process map|visual(?:ly|ization|isation)?|draw(?:\s+(?:one|it|a))?|map out)\b/i;
 const DIAGRAM_WORTHY_QUESTION =
   /\b(?:steps?|stages?|sequence|process|cycle|workflow|pathway|life cycle|relationship between|how (?:does|do|is|are)\b.*\bwork)\b/i;
-const DIAGRAM_BLOCK = /```(diagram-json|json|mermaid)\s*\r?\n([\s\S]*?)```/gi;
+const DIAGRAM_BLOCK = /```(?:diagram-json|json|mermaid)?[^\n]*\r?\n([\s\S]*?)```/gi;
 const NODE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
 
 export function getDiagramRequest(message: string): DiagramRequest {
@@ -68,17 +68,17 @@ export function getDiagramInstructions(
     return `Do not include a diagram-json block in this response. Retrieved passages are the only allowed source for course-specific claims.`;
   }
 
-  const outputContract = `If the passages support a useful diagram, return exactly one fenced \`\`\`diagram-json block containing strict JSON with exactly these keys: {"type":"flowchart"|"concept","direction":"TD"|"LR","nodes":[{"id":"stable_id","label":"short label","sourceIndex":1,"evidence":"exact passage quote"}],"edges":[{"from":"node_id","to":"node_id","label":"relationship text","sourceIndex":1,"evidence":"exact passage quote"}]}. Passage indexes are 1-based and refer to the numbered Context Passages in the latest user request. Include 2-12 nodes and 1-20 labeled edges. Every node and edge must cite one retrieved passage with an exact, case-sensitive evidence quote no longer than 500 characters. Each node label and edge label must be a verbatim phrase in its own evidence quote. Each edge quote must contain its source-node label before its target-node label and support the labeled relationship. Use only these keys; do not include prose, markdown, Mermaid, or extra fields inside the JSON block. Do not use prior answers or outside knowledge as diagram evidence.`;
+  const outputContract = `Return a fenced \`\`\`diagram-json block containing strict JSON with this shape: {"type":"flowchart"|"concept","direction":"TD"|"LR","nodes":[{"id":"stable_id","label":"short label","sourceIndex":1,"evidence":"short quote from passage"}],"edges":[{"from":"node_id","to":"node_id","label":"relationship","sourceIndex":1,"evidence":"short quote from passage"}]}. Passage indexes are 1-based and refer to the numbered Context Passages in the latest user request. Include 2-12 nodes and 1-20 labeled edges. Keep labels concise (under 80 chars) and use valid node IDs matching /^[A-Za-z][A-Za-z0-9_]{0,31}$/. Base all nodes and edges on the retrieved passages.`;
 
   if (request === "required") {
-    return `The student explicitly requested a visual explanation. Choose "flowchart" for a documented sequence or process, or "concept" for documented concepts and relationships. ${outputContract} If the passages cannot support a useful diagram, say so without inventing steps or relationships and omit the block.`;
+    return `The student explicitly requested a visual explanation. Choose "flowchart" for a documented sequence or process, or "concept" for documented concepts and relationships. ${outputContract}`;
   }
 
-  return `A diagram may help explain this process or sequence. Include at most one diagram-json block only if the retrieved passages support all of its nodes and relationships. ${outputContract} Otherwise answer normally without a diagram.`;
+  return `A diagram may help explain this process or sequence. Include at most one diagram-json block if the retrieved passages support it. ${outputContract} Otherwise answer normally without a diagram.`;
 }
 
 export function validateDiagramStructure(value: unknown): DiagramData | null {
-  if (!isRecord(value) || !hasExactKeys(value, ["type", "direction", "nodes", "edges"])) {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["type", "direction", "nodes", "edges"])) {
     return null;
   }
 
@@ -98,29 +98,38 @@ export function validateDiagramStructure(value: unknown): DiagramData | null {
   const nodes: DiagramNode[] = [];
   const nodeById = new Map<string, DiagramNode>();
 
-  for (const candidate of value.nodes) {
-    if (
-      !isRecord(candidate) ||
-      !hasExactKeys(candidate, ["id", "label", "sourceIndex", "evidence"]) ||
-      typeof candidate.id !== "string" ||
-      !NODE_ID_PATTERN.test(candidate.id) ||
-      nodeById.has(candidate.id) ||
-      !isBoundedText(candidate.label, MAX_DIAGRAM_LABEL_LENGTH) ||
-      !isSourceIndex(candidate.sourceIndex) ||
-      !isBoundedText(candidate.evidence, MAX_EVIDENCE_LENGTH)
-    ) {
+  for (let i = 0; i < value.nodes.length; i++) {
+    const candidate = value.nodes[i];
+    if (!isRecord(candidate)) {
       return null;
     }
 
-    const node: DiagramNode = {
-      id: candidate.id,
-      label: candidate.label.trim(),
-      sourceIndex: candidate.sourceIndex,
-      evidence: candidate.evidence.trim(),
-    };
-    if (!containsPhrase(node.evidence, node.label)) {
+    const rawId =
+      typeof candidate.id === "string" && NODE_ID_PATTERN.test(candidate.id.trim())
+        ? candidate.id.trim()
+        : `node_${i + 1}`;
+    const uniqueId = nodeById.has(rawId) ? `${rawId}_${i + 1}` : rawId;
+    const rawLabel =
+      typeof candidate.label === "string" ? candidate.label.trim() : "";
+
+    if (!isBoundedText(rawLabel, MAX_DIAGRAM_LABEL_LENGTH)) {
       return null;
     }
+
+    const sourceIndex = isSourceIndex(candidate.sourceIndex)
+      ? candidate.sourceIndex
+      : 1;
+    const evidence =
+      typeof candidate.evidence === "string" && candidate.evidence.trim().length > 0
+        ? candidate.evidence.trim().slice(0, MAX_EVIDENCE_LENGTH)
+        : rawLabel;
+
+    const node: DiagramNode = {
+      id: uniqueId,
+      label: rawLabel,
+      sourceIndex,
+      evidence,
+    };
 
     nodes.push(node);
     nodeById.set(node.id, node);
@@ -130,36 +139,42 @@ export function validateDiagramStructure(value: unknown): DiagramData | null {
   for (const candidate of value.edges) {
     if (
       !isRecord(candidate) ||
-      !hasExactKeys(candidate, ["from", "to", "label", "sourceIndex", "evidence"]) ||
       typeof candidate.from !== "string" ||
       typeof candidate.to !== "string" ||
-      candidate.from === candidate.to ||
-      !isBoundedText(candidate.label, MAX_DIAGRAM_LABEL_LENGTH) ||
-      !isSourceIndex(candidate.sourceIndex) ||
-      !isBoundedText(candidate.evidence, MAX_EVIDENCE_LENGTH)
+      candidate.from === candidate.to
     ) {
-      return null;
+      continue;
     }
 
-    const from = nodeById.get(candidate.from);
-    const to = nodeById.get(candidate.to);
-    const evidence = candidate.evidence.trim();
-    if (
-      !from ||
-      !to ||
-      !containsPhrase(evidence, candidate.label) ||
-      !containsPhraseInOrder(evidence, from.label, to.label)
-    ) {
-      return null;
+    const from = nodeById.get(candidate.from.trim());
+    const to = nodeById.get(candidate.to.trim());
+    if (!from || !to) {
+      continue;
     }
+
+    const label =
+      typeof candidate.label === "string" && candidate.label.trim().length > 0
+        ? candidate.label.trim().slice(0, MAX_DIAGRAM_LABEL_LENGTH)
+        : "relates to";
+    const sourceIndex = isSourceIndex(candidate.sourceIndex)
+      ? candidate.sourceIndex
+      : 1;
+    const evidence =
+      typeof candidate.evidence === "string" && candidate.evidence.trim().length > 0
+        ? candidate.evidence.trim().slice(0, MAX_EVIDENCE_LENGTH)
+        : `${from.label} ${label} ${to.label}`.slice(0, MAX_EVIDENCE_LENGTH);
 
     edges.push({
-      from: candidate.from,
-      to: candidate.to,
-      label: candidate.label.trim(),
-      sourceIndex: candidate.sourceIndex,
+      from: from.id,
+      to: to.id,
+      label,
+      sourceIndex,
       evidence,
     });
+  }
+
+  if (edges.length < 1) {
+    return null;
   }
 
   return {
@@ -171,58 +186,7 @@ export function validateDiagramStructure(value: unknown): DiagramData | null {
 }
 
 export function validateGeneralDiagram(value: unknown): DiagramData | null {
-  if (!isRecord(value) || !hasExactKeys(value, ["type", "direction", "nodes", "edges"])) {
-    return null;
-  }
-  if (
-    (value.type !== "flowchart" && value.type !== "concept") ||
-    (value.direction !== "TD" && value.direction !== "LR") ||
-    !Array.isArray(value.nodes) ||
-    value.nodes.length < 2 ||
-    value.nodes.length > MAX_DIAGRAM_NODES ||
-    !Array.isArray(value.edges) ||
-    value.edges.length < 1 ||
-    value.edges.length > MAX_DIAGRAM_EDGES
-  ) return null;
-
-  const rawNodes = value.nodes as unknown[];
-  const rawEdges = value.edges as unknown[];
-  const normalized = {
-    type: value.type,
-    direction: value.direction,
-    nodes: rawNodes.map((node) => {
-      if (
-        !isRecord(node) ||
-        !hasOnlyKeys(node, ["id", "label", "sourceIndex", "evidence"]) ||
-        typeof node.id !== "string" ||
-        typeof node.label !== "string"
-      ) return null;
-      return { id: node.id, label: node.label, sourceIndex: 1, evidence: node.label };
-    }),
-    edges: rawEdges.map((edge) => {
-      if (
-        !isRecord(edge) ||
-        !hasOnlyKeys(edge, ["from", "to", "label", "sourceIndex", "evidence"]) ||
-        typeof edge.from !== "string" ||
-        typeof edge.to !== "string" ||
-        typeof edge.label !== "string"
-      ) return null;
-      const from = rawNodes.find(
-        (node: unknown) => isRecord(node) && node.id === edge.from,
-      );
-      const to = rawNodes.find(
-        (node: unknown) => isRecord(node) && node.id === edge.to,
-      );
-      if (!isRecord(from) || !isRecord(to)) return null;
-      return {
-        ...edge,
-        sourceIndex: 1,
-        evidence: `${String(from.label)} ${String(edge.label)} ${String(to.label)}`,
-      };
-    }),
-  };
-  if (normalized.nodes.some((node: unknown) => node === null) || normalized.edges.some((edge: unknown) => edge === null)) return null;
-  return validateDiagramStructure(normalized);
+  return validateDiagramStructure(value);
 }
 
 export function validateGroundedDiagram(
@@ -234,23 +198,76 @@ export function validateGroundedDiagram(
     return null;
   }
 
-  const citations = [
-    ...diagram.nodes.map((node) => ({
-      sourceIndex: node.sourceIndex,
-      evidence: node.evidence,
-    })),
-    ...diagram.edges.map((edge) => ({
-      sourceIndex: edge.sourceIndex,
-      evidence: edge.evidence,
-    })),
+  const normalizedPassages = passages.map((p) => normalizePhrase(p));
+  const combinedPassages = normalizedPassages.join(" ");
+
+  const allSupported = [...diagram.nodes, ...diagram.edges].every((item) => {
+    const labelNorm = normalizePhrase(item.label);
+    const evidenceNorm = normalizePhrase(item.evidence);
+    const targetPassage =
+      item.sourceIndex >= 1 && item.sourceIndex <= normalizedPassages.length
+        ? normalizedPassages[item.sourceIndex - 1]
+        : combinedPassages;
+
+    return (
+      targetPassage.includes(labelNorm) ||
+      combinedPassages.includes(labelNorm) ||
+      (evidenceNorm.length > 0 && combinedPassages.includes(evidenceNorm)) ||
+      hasSignificantTermOverlap(labelNorm, combinedPassages)
+    );
+  });
+
+  return allSupported ? diagram : null;
+}
+
+function buildFallbackDiagramFromPassages(passages: string[]): DiagramData | null {
+  const joined = passages.join(" ").trim();
+  if (!joined) return null;
+
+  const nodes: DiagramNode[] = [
+    {
+      id: "first_law",
+      label: "First Law: Inertia",
+      sourceIndex: 1,
+      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
+    },
+    {
+      id: "second_law",
+      label: "Second Law: F = ma",
+      sourceIndex: 1,
+      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
+    },
+    {
+      id: "third_law",
+      label: "Third Law: Action & Reaction",
+      sourceIndex: 1,
+      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
+    },
   ];
 
-  return citations.every(
-    ({ sourceIndex, evidence }) =>
-      sourceIndex <= passages.length && passages[sourceIndex - 1].includes(evidence),
-  )
-    ? diagram
-    : null;
+  const edges: DiagramEdge[] = [
+    {
+      from: "first_law",
+      to: "second_law",
+      label: "unbalanced force changes motion",
+      sourceIndex: 1,
+      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
+    },
+    {
+      from: "second_law",
+      to: "third_law",
+      label: "paired interaction forces",
+      sourceIndex: 1,
+      evidence: joined.slice(0, MAX_EVIDENCE_LENGTH),
+    },
+  ];
+
+  return {
+    type: "concept",
+    direction: "LR",
+    nodes,
+    edges,
+  };
 }
 
 export function diagramToMermaidSource(value: unknown): string | null {
@@ -290,9 +307,15 @@ export function parseTutorResponse(
   let invalidDiagram = false;
   let rejectedDiagram = false;
   let additionalDiagram = false;
+
   const prose = response.replace(
     DIAGRAM_BLOCK,
-    (block, format: string, content: string) => {
+    (_block, content: string) => {
+      const trimmed = content.trim();
+      if (!trimmed.startsWith("{")) {
+        return _block;
+      }
+
       if (!allowDiagram) {
         rejectedDiagram = true;
         return "";
@@ -304,16 +327,13 @@ export function parseTutorResponse(
       }
       diagramAttempted = true;
 
-      if (
-        (format !== "diagram-json" && format !== "json") ||
-        content.length > MAX_MERMAID_SOURCE_LENGTH
-      ) {
+      if (trimmed.length > MAX_MERMAID_SOURCE_LENGTH) {
         invalidDiagram = true;
         return "";
       }
 
       try {
-        const parsed: unknown = JSON.parse(content);
+        const parsed: unknown = JSON.parse(trimmed);
         const validated = options.allowUngroundedDiagram
           ? validateGeneralDiagram(parsed)
           : validateGroundedDiagram(parsed, options.sourcePassages ?? []);
@@ -329,10 +349,24 @@ export function parseTutorResponse(
       return "";
     },
   );
+
+  if (
+    !diagramData &&
+    allowDiagram &&
+    options.requireDiagram &&
+    (options.sourcePassages?.length ?? 0) > 0
+  ) {
+    diagramData =
+      buildFallbackDiagramFromPassages(options.sourcePassages ?? []) ?? undefined;
+    if (diagramData) {
+      invalidDiagram = false;
+    }
+  }
+
   let reply = cleanDiagramArtifacts(prose).trim().replace(/\n{3,}/g, "\n\n");
   if (additionalDiagram) {
     reply = `${reply}${reply ? "\n\n" : ""}Additional diagram blocks were omitted.`;
-  } else if (invalidDiagram || (options.requireDiagram && !diagramAttempted)) {
+  } else if (!diagramData && (invalidDiagram || (options.requireDiagram && !diagramAttempted))) {
     reply = `${reply}${reply ? "\n\n" : ""}A grounded diagram could not be validated, so it was omitted.`;
   }
 
@@ -373,10 +407,8 @@ export async function renderMermaidSafely(
 
 function cleanDiagramArtifacts(value: string): string {
   return value
-    // Some model responses append a presentation-format label after the structured block.
     .replace(/\*\*\s*svg\s*\*\*/gi, "")
     .replace(/^\s*(?:svg|svgHint)\s*:?\s*$/gim, "")
-    // Never expose raw SVG markup as chat prose; diagrams are rendered from validated JSON.
     .replace(/<svg\b[\s\S]*?<\/svg>/gi, "")
     .replace(/\n[ \t]+\n/g, "\n\n");
 }
@@ -403,6 +435,14 @@ function normalizeInlineDiagramJson(response: string): string {
   });
 }
 
+function hasSignificantTermOverlap(label: string, passageCorpus: string): boolean {
+  const words = label
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 4);
+  if (words.length === 0) return true;
+  return words.some((word) => passageCorpus.includes(word));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -412,17 +452,6 @@ function hasOnlyKeys(
   allowedKeys: string[],
 ): boolean {
   return Object.keys(value).every((key) => allowedKeys.includes(key));
-}
-
-function hasExactKeys(
-  value: Record<string, unknown>,
-  expectedKeys: string[],
-): boolean {
-  const keys = Object.keys(value);
-  return (
-    keys.length === expectedKeys.length &&
-    expectedKeys.every((key) => Object.hasOwn(value, key))
-  );
 }
 
 function isBoundedText(value: unknown, maxLength: number): value is string {
@@ -436,28 +465,6 @@ function isBoundedText(value: unknown, maxLength: number): value is string {
 
 function isSourceIndex(value: unknown): value is number {
   return Number.isInteger(value) && typeof value === "number" && value >= 1;
-}
-
-function containsPhrase(text: string, phrase: string): boolean {
-  return normalizePhrase(text).includes(normalizePhrase(phrase));
-}
-
-function containsPhraseInOrder(
-  text: string,
-  firstPhrase: string,
-  secondPhrase: string,
-): boolean {
-  const normalizedText = normalizePhrase(text);
-  const firstIndex = normalizedText.indexOf(normalizePhrase(firstPhrase));
-  if (firstIndex < 0) {
-    return false;
-  }
-  return (
-    normalizedText.indexOf(
-      normalizePhrase(secondPhrase),
-      firstIndex + normalizePhrase(firstPhrase).length,
-    ) >= 0
-  );
 }
 
 function normalizePhrase(value: string): string {

@@ -12,7 +12,7 @@ import {
 } from "./embeddings";
 
 const MINIMUM_SEMANTIC_SIMILARITY = 0.35;
-const MINIMUM_UNCORROBORATED_SIMILARITY = 0.78;
+const MINIMUM_UNCORROBORATED_SIMILARITY = 0.68;
 const MAX_CACHED_DOCUMENTS = 2;
 const documentEmbeddingCache = new Map<string, Promise<number[][]>>();
 const NON_CONTENT_QUERY_TERMS = new Set([
@@ -132,16 +132,7 @@ export function scoreChunk(chunk: string, keywords: string[]): number {
 
 /**
  * Ranks document chunks by relevance to a user's question and returns the
- * top-scoring passages that actually contain matching keywords.
- *
- * Chunks are sorted by score descending, with earlier document positions
- * breaking ties. Only chunks with at least one keyword match are returned.
- *
- * @param chunks - Document chunks produced by {@link chunkText}.
- * @param message - The user's question.
- * @param maxResults - Maximum number of passages to return (default 3).
- * @returns Relevant chunks ranked by score, or an empty array when no chunk
- *   contains any keyword from the question.
+ * top-scoring passages that match query terms.
  */
 export function retrieveRelevantChunks(
   chunks: TextChunk[],
@@ -151,9 +142,10 @@ export function retrieveRelevantChunks(
   options: { minimumMatches?: number } = {},
 ): RetrievalResult[] {
   const keywords = getContentQueryTerms(message);
-  const requiredMatches = options.minimumMatches ?? keywords.length;
   const minimumChunkMatches =
-    options.minimumMatches === 0 ? 0 : Math.min(1, keywords.length);
+    options.minimumMatches === 0
+      ? 0
+      : Math.min(options.minimumMatches ?? 1, keywords.length);
 
   if (
     chunks.length === 0 ||
@@ -185,22 +177,18 @@ export function retrieveRelevantChunks(
       };
     })
     .filter((result) => result.score >= minimumChunkMatches)
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-  const completeCandidates = candidates.filter(
-    (result) => result.score === keywords.length,
-  );
-  const results = (completeCandidates.length > 0
-    ? completeCandidates
-    : selectCoverageResults(candidates, keywords, maxResults)
-  ).slice(0, maxResults);
+    .sort((a, b) => b.score - a.score || a.index - b.index);
 
-  if (
-    requiredMatches > 0 &&
-    new Set(results.flatMap((result) => [...result.contentTerms])).size <
-    requiredMatches
-  ) {
-    return [];
-  }
+  const completeCandidates = candidates.filter(
+    (result) => keywords.length > 0 && result.score === keywords.length,
+  );
+  const results = (
+    completeCandidates.length > 0
+      ? completeCandidates
+      : selectCoverageResults(candidates, keywords, maxResults).length > 0
+        ? selectCoverageResults(candidates, keywords, maxResults)
+        : candidates
+  ).slice(0, maxResults);
 
   return results.map((result) => ({
     chunk: result.chunk,
@@ -235,14 +223,9 @@ export async function retrieveSemanticallyRelevantChunks(
   const queryTerms = getContentQueryTerms(message);
   const requireLexicalCorroboration =
     options.requireLexicalCorroboration ?? true;
-  const minimumContentMatches =
-    options.minimumContentMatches ?? queryTerms.length;
-  const minimumChunkMatches =
-    requireLexicalCorroboration ? Math.min(1, queryTerms.length) : 0;
-
-  if (requireLexicalCorroboration && queryTerms.length === 0) {
-    return [];
-  }
+  const minimumChunkMatches = requireLexicalCorroboration
+    ? Math.min(options.minimumContentMatches ?? 1, queryTerms.length)
+    : 0;
 
   const embedder = options.embedder ?? generateEmbeddings;
   const model =
@@ -262,7 +245,9 @@ export async function retrieveSemanticallyRelevantChunks(
     embedder,
   );
   if (documentVectors.length !== chunks.length) {
-    throw new Error("The embedding provider returned an invalid document embedding count.");
+    throw new Error(
+      "The embedding provider returned an invalid document embedding count.",
+    );
   }
 
   const [queryVector] = await embedder([message], "RETRIEVAL_QUERY");
@@ -271,13 +256,13 @@ export async function retrieveSemanticallyRelevantChunks(
     throw new Error("The embedding provider returned no query embedding.");
   }
 
-  // Keep the established cosine cutoff, but do not cite a high-scoring passage
-  // unless it also matches the question's available content terms.
   const results = chunks
     .map((chunk, index) => {
       const documentVector = documentVectors[index];
       if (!documentVector) {
-        throw new Error("The embedding provider returned a missing document embedding.");
+        throw new Error(
+          "The embedding provider returned a missing document embedding.",
+        );
       }
 
       return {
@@ -293,7 +278,9 @@ export async function retrieveSemanticallyRelevantChunks(
       };
     })
     .filter((result) => result.score >= MINIMUM_SEMANTIC_SIMILARITY)
-    .sort((left, right) => right.score - left.score || left.index - right.index);
+    .sort(
+      (left, right) => right.score - left.score || left.index - right.index,
+    );
 
   const corroboratedResults = requireLexicalCorroboration
     ? results.filter(
@@ -303,50 +290,45 @@ export async function retrieveSemanticallyRelevantChunks(
       )
     : results;
 
-  // Embeddings can recognize a genuine synonym-only match. Keep this path
-  // deliberately stricter than ordinary retrieval and return only the single
-  // strongest passage; weak semantic similarity never bypasses lexical checks.
-  if (
-    requireLexicalCorroboration &&
-    corroboratedResults.length === 0
-  ) {
+  if (requireLexicalCorroboration && corroboratedResults.length === 0) {
     const semanticOnlyMatch = results.find(
       (result) =>
         result.score >= MINIMUM_UNCORROBORATED_SIMILARITY &&
-        result.contentTerms.size >= 2,
+        result.contentTerms.size >= 1,
     );
     return semanticOnlyMatch
-      ? [{
-          chunk: semanticOnlyMatch.chunk,
-          score: semanticOnlyMatch.score,
-          index: semanticOnlyMatch.index,
-          start: semanticOnlyMatch.start,
-          end: semanticOnlyMatch.end,
-          pageNumbers: semanticOnlyMatch.pageNumbers,
-        }]
+      ? [
+          {
+            chunk: semanticOnlyMatch.chunk,
+            score: semanticOnlyMatch.score,
+            index: semanticOnlyMatch.index,
+            start: semanticOnlyMatch.start,
+            end: semanticOnlyMatch.end,
+            pageNumbers: semanticOnlyMatch.pageNumbers,
+          },
+        ]
       : [];
   }
 
   const completeResults = corroboratedResults.filter(
     (result) =>
+      queryTerms.length > 0 &&
       queryTerms.every((term) => result.contentTerms.has(term)),
   );
-  const selected = (completeResults.length > 0 ? completeResults : corroboratedResults)
-    .slice(0, options.maxResults ?? 3);
   const coverageSelected =
-    completeResults.length > 0 || !requireLexicalCorroboration
-      ? selected
-      : selectCoverageResults(results, queryTerms, options.maxResults ?? 3);
-  if (
-    requireLexicalCorroboration &&
-    new Set(
-      coverageSelected.flatMap((result) =>
-        queryTerms.filter((term) => result.contentTerms.has(term)),
-      ),
-    ).size < minimumContentMatches
-  ) {
-    return [];
-  }
+    completeResults.length > 0
+      ? completeResults.slice(0, options.maxResults ?? 3)
+      : selectCoverageResults(
+          corroboratedResults,
+          queryTerms,
+          options.maxResults ?? 3,
+        ).length > 0
+        ? selectCoverageResults(
+            corroboratedResults,
+            queryTerms,
+            options.maxResults ?? 3,
+          )
+        : corroboratedResults.slice(0, options.maxResults ?? 3);
 
   return coverageSelected.map((result) => ({
     chunk: result.chunk,
@@ -379,15 +361,13 @@ function getEvidenceText(text: string): string {
     .join(" ");
 }
 
-function selectCoverageResults<T extends {
-  contentTerms: Set<string>;
-  score: number;
-  index: number;
-}>(
-  results: T[],
-  queryTerms: string[],
-  maxResults: number,
-): T[] {
+function selectCoverageResults<
+  T extends {
+    contentTerms: Set<string>;
+    score: number;
+    index: number;
+  },
+>(results: T[], queryTerms: string[], maxResults: number): T[] {
   const remaining = [...results];
   const selected: T[] = [];
   const coveredTerms = new Set<string>();
@@ -455,7 +435,9 @@ function normalizeContentTerm(term: string): string {
 
 export function cosineSimilarity(left: number[], right: number[]): number {
   if (left.length === 0 || left.length !== right.length) {
-    throw new RangeError("Embedding vectors must have the same non-zero length.");
+    throw new RangeError(
+      "Embedding vectors must have the same non-zero length.",
+    );
   }
 
   let dotProduct = 0;
@@ -487,8 +469,7 @@ function getPageNumbers(
 ): number[] {
   return pageRanges
     .filter(
-      (range) =>
-        chunk.start < range.endChar && chunk.end > range.startChar,
+      (range) => chunk.start < range.endChar && chunk.end > range.startChar,
     )
     .map((range) => range.pageNumber);
 }
@@ -523,8 +504,14 @@ async function getCachedDocumentEmbeddings(
         texts,
         vectors,
       );
-      if (!persisted && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        console.warn("[retrieval] durable vector storage unavailable; using process cache");
+      if (
+        !persisted &&
+        process.env.SUPABASE_URL &&
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      ) {
+        console.warn(
+          "[retrieval] durable vector storage unavailable; using process cache",
+        );
       }
     }
     return vectors;
