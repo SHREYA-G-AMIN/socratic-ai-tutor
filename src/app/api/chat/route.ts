@@ -198,8 +198,8 @@ export async function POST(request: Request) {
       ),
     ].join(" ");
     const roundRobinNeedsIllustrativeExample =
-      /round\\s*robin/i.test(conversationTopic) &&
-      !sources.some((source) => /round\\s*robin|time quantum|time slice.{0,30}(?:p[1-9]|process)|p[1-9].{0,30}(?:ms|milliseconds)/i.test(source.text));
+      /round\s*robin/i.test(conversationTopic) &&
+      !sources.some((source) => /round\s*robin|time quantum|time slice.{0,30}(?:p[1-9]|process)|p[1-9].{0,30}(?:ms|milliseconds)/i.test(source.text));
     const generalDiagramRequest =
       !documentOnlyDiagramRequest &&
       (isGeneralDiagramRequest(currentMessage) ||
