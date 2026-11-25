@@ -49,6 +49,7 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [mobileTab, setMobileTab] = useState<"document" | "chat">("document");
   const [retryHint, setRetryHint] = useState(false);
+  const [sourceToReveal, setSourceToReveal] = useState<ChatSourceReference | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const documentSessionRef = useRef(0);
   const learningProgress = useMemo(
@@ -76,6 +77,7 @@ export default function Home() {
     setInputValue("");
     setChatError(null);
     setRetryHint(false);
+    setSourceToReveal(null);
     setIsLoading(false);
   };
 
@@ -86,6 +88,7 @@ export default function Home() {
     setInputValue("");
     setChatError(null);
     setRetryHint(false);
+    setSourceToReveal(null);
     setIsLoading(false);
   };
 
@@ -290,6 +293,7 @@ export default function Home() {
             <DocumentPreview
               document={uploadedDocument}
               onReset={handleDocumentReset}
+              sourceToReveal={sourceToReveal}
             />
           ) : (
             <div className="flex flex-col h-full min-h-0 overflow-hidden">
@@ -436,14 +440,22 @@ export default function Home() {
                       </p>
                       <ul className="mt-1 space-y-1">
                         {msg.sources.map((source) => (
-                          <li
-                            key={`${source.chunkIndex}-${source.startChar}`}
-                            className="text-[11px] text-text-secondary"
-                          >
-                            {source.fileName ?? "Uploaded document"}
-                            {source.pageNumbers.length > 0
-                              ? ` · page${source.pageNumbers.length > 1 ? "s" : ""} ${source.pageNumbers.join(", ")}`
-                              : ` · text ${source.startChar}–${source.endChar}`}
+                          <li key={`${source.chunkIndex}-${source.startChar}`}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSourceToReveal({ ...source });
+                                setMobileTab("document");
+                              }}
+                              className="text-left text-[11px] text-accent-secondary underline decoration-dotted underline-offset-2 hover:text-accent-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
+                              aria-label={`Open source passage from ${source.fileName ?? "uploaded document"}${source.pageNumbers.length > 0 ? `, page ${source.pageNumbers.join(", ")}` : ""}`}
+                            >
+                              {source.fileName ?? "Uploaded document"}
+                              {source.pageNumbers.length > 0
+                                ? ` · page${source.pageNumbers.length > 1 ? "s" : ""} ${source.pageNumbers.join(", ")}`
+                                : ` · text ${source.startChar}–${source.endChar}`}
+                              <span className="ml-1 text-text-muted">· Open passage</span>
+                            </button>
                           </li>
                         ))}
                       </ul>
