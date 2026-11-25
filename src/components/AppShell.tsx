@@ -10,7 +10,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
 
-  const closeSidebar = useCallback(() => setSidebarOpen(false), []);\n\n  if (["/login", "/signup", "/forgot-password", "/reset-password"].includes(pathname)) {\n    return <>{children}</>;\n  }
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+
+  if (["/login", "/signup", "/forgot-password", "/reset-password"].includes(pathname)) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
