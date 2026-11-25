@@ -9,10 +9,7 @@ import { TutorMessage } from "@/components/TutorMessage";
 import { getLearningProgress } from "@/lib/ai/learning-progress";
 import type { ChatResponse, ChatSourceReference } from "@/types/chat";
 import type { DiagramData } from "@/lib/ai/visual-explanations";
-import type {
-  DocumentPageRange,
-  DocumentUploadSuccessData,
-} from "@/types/document";
+import type { DocumentUploadSuccessData } from "@/types/document";
 
 interface Message {
   role: "tutor" | "student" | "hint";
@@ -26,9 +23,8 @@ interface Message {
 
 interface ChatRequest {
   message: string;
-  documentText: string;
-  fileName: string;
-  pageRanges: DocumentPageRange[];
+  documentId: string;
+  conversationId: string | null;
   history: Message[];
 }
 
@@ -45,6 +41,7 @@ export default function Home() {
   const [chatError, setChatError] = useState<string | null>(null);
   const [uploadedDocument, setUploadedDocument] =
     useState<DocumentUploadSuccessData | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [inputValue, setInputValue] = useState("");
   const [mobileTab, setMobileTab] = useState<"document" | "chat">("document");
@@ -68,10 +65,65 @@ export default function Home() {
     });
   }, [messages, isLoading]);
 
+  // Restore saved work opened from My Documents or Chat History.
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams(window.location.search);
+    const requestedConversationId = params.get("conversationId");
+    const requestedDocumentId = params.get("documentId");
+
+    async function loadDocument(id: string) {
+      const response = await fetch(`/api/documents/${encodeURIComponent(id)}`);
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Could not open this document.");
+      const row = body.document;
+      const doc: DocumentUploadSuccessData = {
+        id: row.id,
+        fileName: row.file_name,
+        fileSizeBytes: row.file_size_bytes,
+        pageCount: row.page_count,
+        characterCount: row.character_count,
+        text: row.extracted_text,
+        pageRanges: row.page_ranges ?? [],
+        truncated: false,
+        ocrUsed: row.ocr_used,
+        ...(row.ocr_provider ? { ocrProvider: row.ocr_provider } : {}),
+      };
+      if (!cancelled) setUploadedDocument(doc);
+    }
+
+    async function restore() {
+      try {
+        if (requestedConversationId) {
+          const response = await fetch(`/api/conversations/${encodeURIComponent(requestedConversationId)}`);
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error || "Could not restore this conversation.");
+          const conversation = body.conversation;
+          if (conversation.document_id) await loadDocument(conversation.document_id);
+          if (!cancelled) {
+            setConversationId(conversation.id);
+            setMessages(Array.isArray(conversation.messages) && conversation.messages.length
+              ? conversation.messages as Message[]
+              : INITIAL_MESSAGES);
+            setMobileTab("chat");
+          }
+        } else if (requestedDocumentId) {
+          await loadDocument(requestedDocumentId);
+        }
+      } catch (cause) {
+        if (!cancelled) setChatError(cause instanceof Error ? cause.message : "Could not restore saved work.");
+      }
+    }
+
+    if (requestedConversationId || requestedDocumentId) void restore();
+    return () => { cancelled = true; };
+  }, []);
+
   // When a document is uploaded, switch to chat on mobile if appropriate
   const handleDocumentUploaded = (doc: DocumentUploadSuccessData) => {
     documentSessionRef.current += 1;
     setUploadedDocument(doc);
+    setConversationId(null);
     setMobileTab("chat");
     setMessages(INITIAL_MESSAGES);
     setInputValue("");
@@ -84,6 +136,7 @@ export default function Home() {
   const handleDocumentReset = () => {
     documentSessionRef.current += 1;
     setUploadedDocument(null);
+    setConversationId(null);
     setMessages(INITIAL_MESSAGES);
     setInputValue("");
     setChatError(null);
@@ -117,9 +170,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           message: hintRequestMsg.text,
-          documentText: uploadedDocument.text,
-          fileName: uploadedDocument.fileName,
-          pageRanges: uploadedDocument.pageRanges,
+          documentId: uploadedDocument.id,
+          conversationId,
           history: messages,
         } satisfies ChatRequest),
       });
@@ -133,6 +185,7 @@ export default function Home() {
       }
 
       const chatBody = body as ChatResponse;
+      if (chatBody.conversationId) setConversationId(chatBody.conversationId);
       setMessages((prev) => [
         ...prev,
         {
@@ -186,9 +239,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           message: inputValue,
-          documentText: uploadedDocument.text,
-          fileName: uploadedDocument.fileName,
-          pageRanges: uploadedDocument.pageRanges,
+          documentId: uploadedDocument.id,
+          conversationId,
           history: messages,
         } satisfies ChatRequest),
       });
@@ -202,6 +254,7 @@ export default function Home() {
       }
 
       const chatBody = body as ChatResponse;
+      if (chatBody.conversationId) setConversationId(chatBody.conversationId);
       setMessages((prev) => [
         ...prev,
         {

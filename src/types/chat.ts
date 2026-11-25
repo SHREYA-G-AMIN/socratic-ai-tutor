@@ -11,6 +11,7 @@ export interface ChatSourceReference {
 }
 
 export interface ChatResponse {
+  conversationId?: string;
   reply: string;
   diagram?: string;
   diagramData?: DiagramData;

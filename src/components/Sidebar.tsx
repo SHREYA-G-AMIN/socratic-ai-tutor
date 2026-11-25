@@ -8,14 +8,14 @@ export interface NavItemConfig {
   id: string;
   href: string;
   label: string;
-  icon: "home" | "documents" | "path" | "chat";
+  icon: "home" | "documents" | "path" | "history";
 }
 
 export const NAV_ITEMS: NavItemConfig[] = [
   { id: "home", href: "/", label: "Home", icon: "home" },
-  { id: "documents", href: "#documents", label: "My Documents", icon: "documents" },
-  { id: "path", href: "#learning-path", label: "Learning Path", icon: "path" },
-  { id: "chat", href: "#chat", label: "Chat", icon: "chat" },
+  { id: "documents", href: "/my-documents", label: "My Documents", icon: "documents" },
+  { id: "path", href: "/learning-path", label: "Learning Path", icon: "path" },
+  { id: "history", href: "/chat-history", label: "Chat History", icon: "history" },
 ];
 
 export function renderNavIcon(icon: NavItemConfig["icon"]): React.ReactElement {
@@ -53,7 +53,7 @@ export function renderNavIcon(icon: NavItemConfig["icon"]): React.ReactElement {
           />
         </svg>
       );
-    case "chat":
+    case "history":
       return (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -94,7 +94,7 @@ export function Sidebar({ className }: { className?: string }) {
       {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
-          const isActive = item.id === "home" && pathname === "/";
+          const isActive = item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.id}

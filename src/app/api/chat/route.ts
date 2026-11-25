@@ -23,6 +23,7 @@ import {
 } from "@/lib/documents/retrieval";
 import type { DocumentPageRange } from "@/types/document";
 import type { ChatResponse, ChatSourceReference } from "@/types/chat";
+import { createClient } from "@/lib/supabase/server";
 
 const MAX_RETRIEVED_CHUNKS = 3;
 const MAX_MESSAGE_LENGTH = 2_000;
@@ -63,19 +64,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    const { message, documentText } = body;
+    const { message, documentId } = body;
     if (
       typeof message !== "string" ||
       message.trim().length === 0 ||
       message.length > MAX_MESSAGE_LENGTH ||
+      typeof documentId !== "string" ||
+      !documentId
+    ) {
+      return NextResponse.json(
+        { error: "A valid message and saved document are required" },
+        { status: 400 },
+      );
+    }
+
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const { data: document, error: documentError } = await supabase
+      .from("documents")
+      .select("id,file_name,extracted_text,page_ranges")
+      .eq("id", documentId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (documentError || !document) {
+      return NextResponse.json({ error: "The selected document was not found in your account" }, { status: 404 });
+    }
+
+    const documentText = document.extracted_text;
+    if (
       typeof documentText !== "string" ||
       documentText.length === 0 ||
       documentText.length > MAX_EXTRACTED_CHARACTERS
     ) {
-      return NextResponse.json(
-        { error: "A valid message and document text are required" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "The saved document has no usable extracted text" }, { status: 422 });
     }
 
     const currentMessage = message.trim();
@@ -103,11 +129,9 @@ export async function POST(request: Request) {
       } satisfies ChatResponse);
     }
 
-    const pageRanges = parsePageRanges(body.pageRanges, documentText.length);
-    const fileName =
-      typeof body.fileName === "string" && body.fileName.trim()
-        ? body.fileName.trim().slice(0, 255)
-        : null;
+    const pageRanges = parsePageRanges(document.page_ranges, documentText.length);
+    const cacheScope = `${user.id}:${document.id}`;
+    const fileName = document.file_name;
 
     let retrievalMode: ChatResponse["retrievalMode"] = "semantic";
     let warning: string | undefined;
@@ -120,6 +144,7 @@ export async function POST(request: Request) {
         {
           maxResults: MAX_RETRIEVED_CHUNKS,
           pageRanges,
+          cacheScope,
           requireLexicalCorroboration: intent !== "summary",
         },
       );
@@ -167,6 +192,11 @@ export async function POST(request: Request) {
             {
               maxResults: MAX_RETRIEVED_CHUNKS,
               pageRanges,
+<<<<<<< HEAD
+=======
+              cacheScope,
+              requireLexicalCorroboration: false,
+>>>>>>> 2251fea73e684a7e7b8140ed63c196cbea5d2846
             },
           );
         } catch {
@@ -221,11 +251,52 @@ export async function POST(request: Request) {
           sources.length === 0));
 
     if (sources.length === 0 && !generalDiagramRequest) {
+      const noEvidenceReply = "I couldn't find supporting information for that question in the uploaded material.";
+      const savedMessages = [
+        ...(Array.isArray(body.history) ? body.history.filter((item) =>
+          item && typeof item === "object" &&
+          ["student", "tutor", "hint"].includes(String((item as { role?: unknown }).role)) &&
+          typeof (item as { text?: unknown }).text === "string"
+        ).slice(-198) : []),
+        { role: "student", text: currentMessage },
+        { role: "tutor", text: noEvidenceReply, sources: [] },
+      ];
+      const firstStudentMessage = savedMessages.find((item) =>
+        item && typeof item === "object" && (item as { role?: string }).role === "student"
+      ) as { text?: string } | undefined;
+      const title = firstStudentMessage?.text?.trim().slice(0, 80) || "New conversation";
+      const requestedConversationId = typeof body.conversationId === "string" ? body.conversationId : null;
+      let conversationId = requestedConversationId;
+
+      if (requestedConversationId) {
+        const { data: savedConversation, error: saveError } = await supabase
+          .from("conversations")
+          .update({ messages: savedMessages, title, updated_at: new Date().toISOString() })
+          .eq("id", requestedConversationId)
+          .eq("user_id", user.id)
+          .eq("document_id", document.id)
+          .select("id")
+          .maybeSingle();
+        if (saveError || !savedConversation) {
+          return NextResponse.json({ error: "Could not save this conversation" }, { status: 500 });
+        }
+      } else {
+        const { data: createdConversation, error: createError } = await supabase
+          .from("conversations")
+          .insert({ user_id: user.id, document_id: document.id, title, messages: savedMessages })
+          .select("id")
+          .single();
+        if (createError || !createdConversation) {
+          return NextResponse.json({ error: "Could not save this conversation" }, { status: 500 });
+        }
+        conversationId = createdConversation.id;
+      }
+
       return NextResponse.json({
-        reply:
-          "I couldn't find supporting information for that question in the uploaded material.",
+        reply: noEvidenceReply,
         sources,
         retrievalMode,
+        conversationId: conversationId ?? undefined,
         ...(warning ? { warning } : {}),
       } satisfies ChatResponse);
     }
@@ -283,11 +354,68 @@ GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The requested topic or worked-example detail
       sourcePassages: sources.map((source) => source.text),
     });
 
+    const previousMessages = Array.isArray(body.history)
+      ? body.history.filter((item) =>
+          item && typeof item === "object" &&
+          ["student", "tutor", "hint"].includes(String((item as { role?: unknown }).role)) &&
+          typeof (item as { text?: unknown }).text === "string"
+        ).slice(-198)
+      : [];
+    const savedMessages = [
+      ...previousMessages,
+      { role: "student", text: currentMessage },
+      {
+        role: "tutor",
+        text: tutorResponse.reply,
+        ...(tutorResponse.diagram ? { diagram: tutorResponse.diagram } : {}),
+        ...(tutorResponse.diagramData ? { diagramData: tutorResponse.diagramData } : {}),
+        sources,
+      },
+    ];
+    const firstStudentMessage = savedMessages.find((item) =>
+      item && typeof item === "object" && (item as { role?: string }).role === "student"
+    ) as { text?: string } | undefined;
+    const title = firstStudentMessage?.text?.trim().slice(0, 80) || "New conversation";
+    const requestedConversationId =
+      typeof body.conversationId === "string" ? body.conversationId : null;
+
+    let conversationId = requestedConversationId;
+    if (requestedConversationId) {
+      const { data: savedConversation, error: saveError } = await supabase
+        .from("conversations")
+        .update({ messages: savedMessages, title, updated_at: new Date().toISOString() })
+        .eq("id", requestedConversationId)
+        .eq("user_id", user.id)
+        .eq("document_id", document.id)
+        .select("id")
+        .maybeSingle();
+      if (saveError || !savedConversation) {
+        return NextResponse.json({ error: "Could not save this conversation" }, { status: 500 });
+      }
+    } else {
+      const { data: createdConversation, error: createError } = await supabase
+        .from("conversations")
+        .insert({
+          user_id: user.id,
+          document_id: document.id,
+          title,
+          messages: savedMessages,
+        })
+        .select("id")
+        .single();
+      if (createError || !createdConversation) {
+        console.error("[api/chat] conversation persistence failed", createError?.message);
+        return NextResponse.json({ error: "Your answer was generated but the conversation could not be saved" }, { status: 500 });
+      }
+      conversationId = createdConversation.id;
+    }
+
     return NextResponse.json({
       ...tutorResponse,
       diagramIsGeneral: Boolean(generalDiagramRequest && tutorResponse.diagramData),
       sources,
       retrievalMode,
+      conversationId: conversationId ?? undefined,
       ...(warning ? { warning } : {}),
     } satisfies ChatResponse);
   } catch (error) {
