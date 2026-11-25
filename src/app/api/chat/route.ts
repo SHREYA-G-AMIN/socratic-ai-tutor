@@ -34,6 +34,16 @@ const GEMINI_GENERATE_API =
   "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_REQUEST_TIMEOUT_MS = 60_000;
 
+class TutorProviderError extends Error {
+  constructor(
+    message: string,
+    readonly status: 502 | 503,
+  ) {
+    super(message);
+    this.name = "TutorProviderError";
+  }
+}
+
 export async function POST(request: Request) {
   try {
     let body: unknown;
@@ -279,6 +289,13 @@ GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The requested topic or worked-example detail
       ...(warning ? { warning } : {}),
     } satisfies ChatResponse);
   } catch (error) {
+    if (error instanceof TutorProviderError) {
+      return NextResponse.json(
+        { error: error.message, code: "TUTOR_PROVIDER_ERROR" },
+        { status: error.status },
+      );
+    }
+
     console.error("Chat API Error:", error);
     return NextResponse.json(
       { error: "Failed to process chat request" },
@@ -451,7 +468,7 @@ async function generateTutorReply(
       );
     } catch {
       if (attempt === 2) {
-        throw new Error("The AI tutor could not be reached after 3 attempts. Please try again.");
+        throw new TutorProviderError("The AI tutor could not be reached after 3 attempts. Please try again.", 503);
       }
     }
 
@@ -461,7 +478,7 @@ async function generateTutorReply(
       response !== undefined &&
       [429, 500, 502, 503, 504].includes(response.status);
     if (attempt === 2 || (response && !retryableStatus)) {
-      throw new Error("The AI tutor could not process the request. Please try again.");
+      throw new TutorProviderError("The AI tutor could not process the request. Please try again.", response && response.status < 500 && response.status !== 429 ? 502 : 503);
     }
 
     await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
@@ -469,7 +486,7 @@ async function generateTutorReply(
   }
 
   if (!response?.ok) {
-    throw new Error("The AI tutor could not process the request. Please try again.");
+    throw new TutorProviderError("The AI tutor could not process the request. Please try again.", 503);
   }
 
   let result: {
@@ -480,7 +497,7 @@ async function generateTutorReply(
   try {
     result = await response.json();
   } catch {
-    throw new Error("The AI tutor returned an invalid response.");
+    throw new TutorProviderError("The AI tutor returned an invalid response. Please try again.", 502);
   }
 
   const reply = result.candidates?.[0]?.content?.parts
@@ -488,7 +505,7 @@ async function generateTutorReply(
     .join("")
     .trim();
   if (!reply) {
-    throw new Error("The AI tutor returned an empty response.");
+    throw new TutorProviderError("The AI tutor returned an empty response. Please try again.", 502);
   }
 
   return reply;
