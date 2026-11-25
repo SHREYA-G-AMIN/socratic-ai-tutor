@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import {
   diagramToMermaidSource,
@@ -34,6 +34,9 @@ export function MermaidDiagram({
             ? validateGeneralDiagram(data)
             : validateGroundedDiagram(data, sourcePassages ?? []),
         );
+  const [zoom, setZoom] = useState(1);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [renderState, setRenderState] = useState<{
     source: string | null;
     result: MermaidRenderResult;
@@ -89,6 +92,57 @@ export function MermaidDiagram({
   const result =
     renderState?.source === mermaidSource ? renderState.result : null;
 
+  useEffect(() => {
+    setZoom(1);
+    setIsExpanded(false);
+  }, [mermaidSource]);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsExpanded(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isExpanded]);
+
+  const changeZoom = (amount: number) => {
+    setZoom((current) => Math.min(3, Math.max(0.5, Math.round((current + amount) * 100) / 100)));
+  };
+
+  const diagramViewport = (expanded: boolean) => (
+    <div
+      ref={viewportRef}
+      role="region"
+      aria-label="Scrollable diagram. Hold Control and use the mouse wheel to zoom."
+      tabIndex={0}
+      onWheel={(event) => {
+        if (!event.ctrlKey) return;
+        event.preventDefault();
+        changeZoom(event.deltaY < 0 ? 0.1 : -0.1);
+      }}
+      className={`min-w-0 overflow-auto rounded-lg bg-surface-elevated/40 ${expanded ? "min-h-0 flex-1" : "max-h-96"}`}
+    >
+      <div
+        className="inline-block min-w-full p-3 [&_svg]:block [&_svg]:h-auto [&_svg]:max-w-none [&_svg]:w-auto"
+        style={{ zoom }}
+        dangerouslySetInnerHTML={{ __html: result?.kind === "rendered" ? result.svg : "" }}
+      />
+    </div>
+  );
+
+  const controls = (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <button type="button" onClick={() => changeZoom(-0.2)} disabled={zoom <= 0.5} aria-label="Zoom out" title="Zoom out" className="rounded-lg border border-border px-2.5 py-1.5 text-sm font-semibold hover:bg-surface-elevated disabled:opacity-40">−</button>
+      <span className="min-w-12 text-center text-xs tabular-nums text-text-secondary">{Math.round(zoom * 100)}%</span>
+      <button type="button" onClick={() => changeZoom(0.2)} disabled={zoom >= 3} aria-label="Zoom in" title="Zoom in" className="rounded-lg border border-border px-2.5 py-1.5 text-sm font-semibold hover:bg-surface-elevated disabled:opacity-40">+</button>
+      <button type="button" onClick={() => setZoom(1)} className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-surface-elevated">Fit / Reset</button>
+      <button type="button" onClick={() => setIsExpanded((value) => !value)} aria-label={isExpanded ? "Close expanded diagram" : "Expand diagram"} className="ml-auto rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-surface-elevated">
+        {isExpanded ? "Close" : "Expand"}
+      </button>
+    </div>
+  );
+
   return (
     <figure className="mt-3 min-w-0 max-w-full rounded-xl border border-border bg-surface p-3">
       <figcaption className="mb-2 text-xs font-semibold text-text-secondary">
@@ -108,12 +162,20 @@ export function MermaidDiagram({
           </pre>
         </div>
       ) : result?.kind === "rendered" ? (
-        <div
-          aria-label="Visual explanation diagram"
-          className="max-h-96 max-w-full overflow-auto [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
-          // Mermaid strict mode sanitizes generated SVG; React keeps it out of the HTML source.
-          dangerouslySetInnerHTML={{ __html: result.svg }}
-        />
+        <div className="space-y-2">
+          {controls}
+          {diagramViewport(false)}
+          {isExpanded && (
+            <div className="fixed inset-0 z-50 flex flex-col gap-3 bg-surface p-4 sm:p-6" role="dialog" aria-modal="true" aria-label="Expanded visual explanation">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-text-primary">Visual explanation</p>
+                {controls}
+              </div>
+              {diagramViewport(true)}
+              <p className="text-center text-xs text-text-muted">Use the controls or hold Ctrl and scroll to zoom. Scroll to pan around the diagram.</p>
+            </div>
+          )}
+        </div>
       ) : (
         <p role="status" className="text-xs text-text-muted">
           Rendering diagram…
