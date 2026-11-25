@@ -198,6 +198,7 @@ export default function Home() {
       }
 
       const chatBody = body as ChatResponse;
+      if (chatBody.conversationId) setConversationId(chatBody.conversationId);
       setMessages((prev) => [
         ...prev,
         {
