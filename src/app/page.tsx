@@ -9,10 +9,7 @@ import { TutorMessage } from "@/components/TutorMessage";
 import { getLearningProgress } from "@/lib/ai/learning-progress";
 import type { ChatResponse, ChatSourceReference } from "@/types/chat";
 import type { DiagramData } from "@/lib/ai/visual-explanations";
-import type {
-  DocumentPageRange,
-  DocumentUploadSuccessData,
-} from "@/types/document";
+import type { DocumentUploadSuccessData } from "@/types/document";
 
 interface Message {
   role: "tutor" | "student" | "hint";
@@ -117,9 +114,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           message: hintRequestMsg.text,
-          documentText: uploadedDocument.text,
-          fileName: uploadedDocument.fileName,
-          pageRanges: uploadedDocument.pageRanges,
+          documentId: uploadedDocument.id,
+          conversationId,
           history: messages,
         } satisfies ChatRequest),
       });
@@ -133,6 +129,7 @@ export default function Home() {
       }
 
       const chatBody = body as ChatResponse;
+      if (chatBody.conversationId) setConversationId(chatBody.conversationId);
       setMessages((prev) => [
         ...prev,
         {
@@ -186,9 +183,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           message: inputValue,
-          documentText: uploadedDocument.text,
-          fileName: uploadedDocument.fileName,
-          pageRanges: uploadedDocument.pageRanges,
+          documentId: uploadedDocument.id,
+          conversationId,
           history: messages,
         } satisfies ChatRequest),
       });
