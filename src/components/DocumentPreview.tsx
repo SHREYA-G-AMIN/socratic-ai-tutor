@@ -1,15 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DocumentUploadSuccessData } from "@/types/document";
 
 export interface DocumentPreviewProps {
   document: DocumentUploadSuccessData;
   onReset?: () => void;
+  sourceToReveal?: { startChar: number; endChar: number } | null;
 }
 
-export function DocumentPreview({ document, onReset }: DocumentPreviewProps) {
+export function DocumentPreview({ document, onReset, sourceToReveal }: DocumentPreviewProps) {
   const [copied, setCopied] = useState(false);
+  const [highlightedSource, setHighlightedSource] = useState<{ startChar: number; endChar: number } | null>(null);
+  const textContainerRef = useRef<HTMLDivElement>(null);
+  const sourceMarkerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!sourceToReveal) return;
+    setHighlightedSource(sourceToReveal);
+
+    const frame = window.requestAnimationFrame(() => {
+      const container = textContainerRef.current;
+      const marker = sourceMarkerRef.current;
+      if (!container || !marker) return;
+
+      const markerTop =
+        marker.getBoundingClientRect().top -
+        container.getBoundingClientRect().top +
+        container.scrollTop;
+      container.scrollTo({
+        top: Math.max(0, markerTop - container.clientHeight * 0.25),
+        behavior: "smooth",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [sourceToReveal]);
+
+  const highlightStart = highlightedSource
+    ? Math.max(0, Math.min(document.text.length, highlightedSource.startChar))
+    : 0;
+  const highlightEnd = highlightedSource
+    ? Math.max(highlightStart, Math.min(document.text.length, highlightedSource.endChar))
+    : 0;
+  const hasHighlightedSource = Boolean(
+    highlightedSource && highlightEnd > highlightStart,
+  );
 
   const handleCopy = async () => {
     try {
@@ -111,9 +147,22 @@ export function DocumentPreview({ document, onReset }: DocumentPreviewProps) {
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 select-text">
+          <div ref={textContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 select-text">
             <pre className="whitespace-pre-wrap break-words text-xs sm:text-sm font-mono text-text-secondary leading-relaxed font-normal">
-              {document.text}
+              {hasHighlightedSource ? (
+                <>
+                  {document.text.slice(0, highlightStart)}
+                  <mark
+                    ref={sourceMarkerRef}
+                    className="rounded bg-accent-primary/25 text-text-primary ring-2 ring-accent-primary/40"
+                  >
+                    {document.text.slice(highlightStart, highlightEnd)}
+                  </mark>
+                  {document.text.slice(highlightEnd)}
+                </>
+              ) : (
+                document.text
+              )}
             </pre>
           </div>
         </div>
