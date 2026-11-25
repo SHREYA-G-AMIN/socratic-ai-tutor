@@ -290,7 +290,7 @@ export async function POST(request: Request) {
         reply: noEvidenceReply,
         sources,
         retrievalMode,
-        conversationId,
+        conversationId: conversationId ?? undefined,
         ...(warning ? { warning } : {}),
       } satisfies ChatResponse);
     }
@@ -409,7 +409,7 @@ GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The requested topic or worked-example detail
       diagramIsGeneral: Boolean(generalDiagramRequest && tutorResponse.diagramData),
       sources,
       retrievalMode,
-      conversationId,
+      conversationId: conversationId ?? undefined,
       ...(warning ? { warning } : {}),
     } satisfies ChatResponse);
   } catch (error) {
