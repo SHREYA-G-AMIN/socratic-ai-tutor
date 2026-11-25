@@ -245,11 +245,52 @@ export async function POST(request: Request) {
           sources.length === 0));
 
     if (sources.length === 0 && !generalDiagramRequest) {
+      const noEvidenceReply = "I couldn't find supporting information for that question in the uploaded material.";
+      const savedMessages = [
+        ...(Array.isArray(body.history) ? body.history.filter((item) =>
+          item && typeof item === "object" &&
+          ["student", "tutor", "hint"].includes(String((item as { role?: unknown }).role)) &&
+          typeof (item as { text?: unknown }).text === "string"
+        ).slice(-198) : []),
+        { role: "student", text: currentMessage },
+        { role: "tutor", text: noEvidenceReply, sources: [] },
+      ];
+      const firstStudentMessage = savedMessages.find((item) =>
+        item && typeof item === "object" && (item as { role?: string }).role === "student"
+      ) as { text?: string } | undefined;
+      const title = firstStudentMessage?.text?.trim().slice(0, 80) || "New conversation";
+      const requestedConversationId = typeof body.conversationId === "string" ? body.conversationId : null;
+      let conversationId = requestedConversationId;
+
+      if (requestedConversationId) {
+        const { data: savedConversation, error: saveError } = await supabase
+          .from("conversations")
+          .update({ messages: savedMessages, title, updated_at: new Date().toISOString() })
+          .eq("id", requestedConversationId)
+          .eq("user_id", user.id)
+          .eq("document_id", document.id)
+          .select("id")
+          .maybeSingle();
+        if (saveError || !savedConversation) {
+          return NextResponse.json({ error: "Could not save this conversation" }, { status: 500 });
+        }
+      } else {
+        const { data: createdConversation, error: createError } = await supabase
+          .from("conversations")
+          .insert({ user_id: user.id, document_id: document.id, title, messages: savedMessages })
+          .select("id")
+          .single();
+        if (createError || !createdConversation) {
+          return NextResponse.json({ error: "Could not save this conversation" }, { status: 500 });
+        }
+        conversationId = createdConversation.id;
+      }
+
       return NextResponse.json({
-        reply:
-          "I couldn't find supporting information for that question in the uploaded material.",
+        reply: noEvidenceReply,
         sources,
         retrievalMode,
+        conversationId,
         ...(warning ? { warning } : {}),
       } satisfies ChatResponse);
     }
