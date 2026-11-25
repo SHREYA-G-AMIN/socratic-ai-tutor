@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import {
   diagramToMermaidSource,
@@ -36,7 +36,6 @@ export function MermaidDiagram({
         );
   const [zoom, setZoom] = useState(1);
   const [isExpanded, setIsExpanded] = useState(false);
-  const viewportRef = useRef<HTMLDivElement>(null);
   const [renderState, setRenderState] = useState<{
     source: string | null;
     result: MermaidRenderResult;
@@ -112,7 +111,6 @@ export function MermaidDiagram({
 
   const diagramViewport = (expanded: boolean) => (
     <div
-      ref={viewportRef}
       role="region"
       aria-label="Scrollable diagram. Hold Control and use the mouse wheel to zoom."
       tabIndex={0}
@@ -136,7 +134,7 @@ export function MermaidDiagram({
       <button type="button" onClick={() => changeZoom(-0.2)} disabled={zoom <= 0.5} aria-label="Zoom out" title="Zoom out" className="rounded-lg border border-border px-2.5 py-1.5 text-sm font-semibold hover:bg-surface-elevated disabled:opacity-40">−</button>
       <span className="min-w-12 text-center text-xs tabular-nums text-text-secondary">{Math.round(zoom * 100)}%</span>
       <button type="button" onClick={() => changeZoom(0.2)} disabled={zoom >= 3} aria-label="Zoom in" title="Zoom in" className="rounded-lg border border-border px-2.5 py-1.5 text-sm font-semibold hover:bg-surface-elevated disabled:opacity-40">+</button>
-      <button type="button" onClick={() => setZoom(1)} className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-surface-elevated">Fit / Reset</button>
+      <button type="button" onClick={() => setZoom(1)} className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-surface-elevated">Reset</button>
       <button type="button" onClick={() => setIsExpanded((value) => !value)} aria-label={isExpanded ? "Close expanded diagram" : "Expand diagram"} className="ml-auto rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-surface-elevated">
         {isExpanded ? "Close" : "Expand"}
       </button>
