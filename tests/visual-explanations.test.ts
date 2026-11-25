@@ -180,7 +180,7 @@ test("general diagrams tolerate optional provenance fields from the model", () =
     ],
   };
   const parsed = parseTutorResponse(
-    `General explanation.\n\n```diagram-json\n${JSON.stringify(data)}\n````,
+    `General explanation.\n\n\x60\x60\x60diagram-json\n${JSON.stringify(data)}\n\x60\x60\x60`,
     { allowDiagram: true, requireDiagram: true, allowUngroundedDiagram: true },
   );
   assert.equal(parsed.diagramData?.nodes.length, 2);
