@@ -23,6 +23,7 @@ import {
 } from "@/lib/documents/retrieval";
 import type { DocumentPageRange } from "@/types/document";
 import type { ChatResponse, ChatSourceReference } from "@/types/chat";
+import { createClient } from "@/lib/supabase/server";
 
 const MAX_RETRIEVED_CHUNKS = 3;
 const MAX_MESSAGE_LENGTH = 2_000;
@@ -60,19 +61,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    const { message, documentText } = body;
+    const { message, documentId } = body;
     if (
       typeof message !== "string" ||
       message.trim().length === 0 ||
       message.length > MAX_MESSAGE_LENGTH ||
+      typeof documentId !== "string" ||
+      !documentId
+    ) {
+      return NextResponse.json(
+        { error: "A valid message and saved document are required" },
+        { status: 400 },
+      );
+    }
+
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const { data: document, error: documentError } = await supabase
+      .from("documents")
+      .select("id,file_name,extracted_text,page_ranges")
+      .eq("id", documentId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (documentError || !document) {
+      return NextResponse.json({ error: "The selected document was not found in your account" }, { status: 404 });
+    }
+
+    const documentText = document.extracted_text;
+    if (
       typeof documentText !== "string" ||
       documentText.length === 0 ||
       documentText.length > MAX_EXTRACTED_CHARACTERS
     ) {
-      return NextResponse.json(
-        { error: "A valid message and document text are required" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "The saved document has no usable extracted text" }, { status: 422 });
     }
 
     const currentMessage = message.trim();
@@ -100,11 +126,8 @@ export async function POST(request: Request) {
       } satisfies ChatResponse);
     }
 
-    const pageRanges = parsePageRanges(body.pageRanges, documentText.length);
-    const fileName =
-      typeof body.fileName === "string" && body.fileName.trim()
-        ? body.fileName.trim().slice(0, 255)
-        : null;
+    const pageRanges = parsePageRanges(document.page_ranges, documentText.length);
+    const fileName = document.file_name;
 
     let retrievalMode: ChatResponse["retrievalMode"] = "semantic";
     let warning: string | undefined;
