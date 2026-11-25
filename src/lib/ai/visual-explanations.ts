@@ -45,7 +45,7 @@ const EXPLICIT_DIAGRAM_REQUEST =
   /\b(?:diagrams?|daigrams?|flowchart|concept map|process map|visual(?:ly|ization|isation)?|draw(?:\s+(?:one|it|a))?|map out)\b/i;
 const DIAGRAM_WORTHY_QUESTION =
   /\b(?:steps?|stages?|sequence|process|cycle|workflow|pathway|life cycle|relationship between|how (?:does|do|is|are)\b.*\bwork)\b/i;
-const DIAGRAM_BLOCK = /```(diagram-json|mermaid)\s*\r?\n([\s\S]*?)```/gi;
+const DIAGRAM_BLOCK = /```(diagram-json|json|mermaid)\s*\r?\n([\s\S]*?)```/gi;
 const NODE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
 
 export function getDiagramRequest(message: string): DiagramRequest {
@@ -305,7 +305,7 @@ export function parseTutorResponse(
       diagramAttempted = true;
 
       if (
-        format !== "diagram-json" ||
+        (format !== "diagram-json" && format !== "json") ||
         content.length > MAX_MERMAID_SOURCE_LENGTH
       ) {
         invalidDiagram = true;
@@ -329,7 +329,7 @@ export function parseTutorResponse(
       return "";
     },
   );
-  let reply = prose.trim().replace(/\n{3,}/g, "\n\n");
+  let reply = cleanDiagramArtifacts(prose).trim().replace(/\n{3,}/g, "\n\n");
   if (additionalDiagram) {
     reply = `${reply}${reply ? "\n\n" : ""}Additional diagram blocks were omitted.`;
   } else if (invalidDiagram || (options.requireDiagram && !diagramAttempted)) {
@@ -369,6 +369,16 @@ export async function renderMermaidSafely(
   } catch {
     return { kind: "fallback", source };
   }
+}
+
+function cleanDiagramArtifacts(value: string): string {
+  return value
+    // Some model responses append a presentation-format label after the structured block.
+    .replace(/\*\*\s*svg\s*\*\*/gi, "")
+    .replace(/^\s*(?:svg|svgHint)\s*:?\s*$/gim, "")
+    // Never expose raw SVG markup as chat prose; diagrams are rendered from validated JSON.
+    .replace(/<svg\b[\s\S]*?<\/svg>/gi, "")
+    .replace(/\n[ \t]+\n/g, "\n\n");
 }
 
 function normalizeInlineDiagramJson(response: string): string {
