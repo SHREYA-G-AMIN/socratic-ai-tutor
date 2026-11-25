@@ -26,7 +26,7 @@ export async function proxy(request: NextRequest) {
   // getUser validates the token with Supabase Auth; do not trust getSession here.
   const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
-  const publicPaths = ["/login", "/signup", "/forgot-password", "/auth/callback", "/auth/confirm"];
+  const publicPaths = ["/login", "/signup", "/forgot-password", "/auth/callback", "/auth/confirm", "/reset-password"];
   const isPublic = publicPaths.some((item) => path === item || path.startsWith(item + "/"));
 
   if (!user && !isPublic) {
