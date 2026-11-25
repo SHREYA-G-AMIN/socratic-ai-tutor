@@ -214,6 +214,8 @@ export async function retrieveSemanticallyRelevantChunks(
     model?: string;
     requireLexicalCorroboration?: boolean;
     minimumContentMatches?: number;
+    /** Isolates durable embeddings by authenticated user and saved document. */
+    cacheScope?: string;
   } = {},
 ): Promise<RetrievalResult[]> {
   if (chunks.length === 0 || !message.trim()) {
@@ -236,6 +238,7 @@ export async function retrieveSemanticallyRelevantChunks(
   const cacheKey = createDocumentCacheKey(
     chunks.map((chunk) => chunk.text),
     model,
+    options.cacheScope,
   );
   const chunkTexts = chunks.map((chunk) => chunk.text);
   const documentVectors = await getCachedDocumentEmbeddings(
@@ -534,7 +537,7 @@ async function getCachedDocumentEmbeddings(
   }
 }
 
-function createDocumentCacheKey(texts: string[], model: string): string {
+function createDocumentCacheKey(texts: string[], model: string, scope?: string): string {
   return createHash("sha256")
     .update(model)
     .update("\0")
