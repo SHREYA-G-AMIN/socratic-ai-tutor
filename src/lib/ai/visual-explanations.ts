@@ -207,14 +207,19 @@ export function validateGroundedDiagram(
     const targetPassage =
       item.sourceIndex >= 1 && item.sourceIndex <= normalizedPassages.length
         ? normalizedPassages[item.sourceIndex - 1]
-        : combinedPassages;
+        : "";
 
-    return (
-      targetPassage.includes(labelNorm) ||
-      combinedPassages.includes(labelNorm) ||
-      (evidenceNorm.length > 0 && combinedPassages.includes(evidenceNorm)) ||
-      hasSignificantTermOverlap(labelNorm, combinedPassages)
-    );
+    // Provenance must point to an exact quote in the cited passage, not merely
+    // to a vaguely similar passage elsewhere in the retrieved context.
+    if (!evidenceNorm || !targetPassage.includes(evidenceNorm)) {
+      return false;
+    }
+
+    // Every meaningful label term must be present in that quoted evidence.
+    // This blocks unrelated diagrams that happen to share one generic word.
+    const labelTerms = labelNorm.split(/[^a-z0-9]+/).filter((word) => word.length >= 3);
+    const evidenceTerms = new Set(evidenceNorm.split(/[^a-z0-9]+/));
+    return labelTerms.length > 0 && labelTerms.every((word) => evidenceTerms.has(word));
   });
 
   return allSupported ? diagram : null;
