@@ -191,9 +191,19 @@ export async function POST(request: Request) {
     const diagramRequest = getDiagramRequest(currentMessage);
     const documentOnlyDiagramRequest =
       isDocumentOnlyDiagramRequest(currentMessage);
+    const conversationTopic = [
+      currentMessage,
+      ...history.filter((turn) => turn.role === "user").map((turn) =>
+        turn.parts.map((part) => part.text).join(""),
+      ),
+    ].join(" ");
+    const roundRobinNeedsIllustrativeExample =
+      /round\\s*robin/i.test(conversationTopic) &&
+      !sources.some((source) => /round\\s*robin|time quantum|time slice.{0,30}(?:p[1-9]|process)|p[1-9].{0,30}(?:ms|milliseconds)/i.test(source.text));
     const generalDiagramRequest =
       !documentOnlyDiagramRequest &&
       (isGeneralDiagramRequest(currentMessage) ||
+        roundRobinNeedsIllustrativeExample ||
         (diagramRequest === "required" &&
           history.length > 0 &&
           sources.length === 0));
@@ -243,7 +253,7 @@ export async function POST(request: Request) {
     const tutorInstructions = generalDiagramRequest
       ? `${baseInstructions}
 
-GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The student asked for a diagram and no relevant document passages were found, or explicitly asked you to use general knowledge. For the diagram only, use reliable general knowledge about the topic in the recent conversation. Do not claim it came from the PDF and do not cite the PDF. Clearly label it as a general explanation. Return exactly one diagram-json block with strict JSON and exactly this shape: {"type":"flowchart"|"concept","direction":"TD"|"LR","nodes":[{"id":"user","label":"User"}],"edges":[{"from":"user","to":"application","label":"uses"}]}. Use 2-12 nodes and 1-20 edges. Node objects must contain only id and label; edge objects only from, to, and label. Labels must be concise, factual, and safe for Mermaid. Do not include sourceIndex or evidence fields. Do not output SVG, HTML, Mermaid syntax, or a separate diagram description. The only diagram representation must be the single diagram-json block. Do not omit the diagram block. Keep prose brief.`
+GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The requested topic or worked-example details are not present in the retrieved document passages, or the student explicitly asked for general knowledge. For the diagram only, use reliable general knowledge about the topic in the recent conversation. Do not claim the illustrative values, steps, or example came from the PDF. Clearly label the diagram and any illustrative example as a general example, separate from the document-supported facts. If the request asks for a timeline or worked example, use a concrete internally consistent example with named processes, a stated quantum, chronological time slices, and cumulative time boundaries. For Round Robin, ensure each slice's process and duration are explicit and show a process returning to the ready queue only when it has remaining burst time. Return exactly one diagram-json block with strict JSON and exactly this shape: {"type":"flowchart"|"concept","direction":"TD"|"LR","nodes":[{"id":"user","label":"User"}],"edges":[{"from":"user","to":"application","label":"uses"}]}. Use 2-12 nodes and 1-20 edges. Node objects must contain only id and label; edge objects only from, to, and label. Labels must be concise, factual, and safe for Mermaid. Do not include sourceIndex or evidence fields. Do not output SVG, HTML, Mermaid syntax, or a separate diagram description. The only diagram representation must be the single diagram-json block. Do not omit the diagram block. Keep prose brief.`
       : baseInstructions;
     const generatedResponse = await generateTutorReply(
       apiKey,
