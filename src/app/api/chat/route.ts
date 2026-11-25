@@ -374,74 +374,91 @@ async function generateTutorReply(
   tutorInstructions: string,
   requireStructuredDiagram = false,
 ): Promise<string> {
-  let response: Response;
-
-  try {
-    response = await fetch(
-      `${GEMINI_GENERATE_API}/${GEMINI_CHAT_MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: tutorInstructions }] },
-          contents,
-          ...(requireStructuredDiagram
-            ? {
-                generationConfig: {
-                  responseMimeType: "application/json",
-                  responseSchema: {
-                    type: "OBJECT",
-                    properties: {
-                      reply: { type: "STRING" },
-                      diagram: {
+  const requestBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: tutorInstructions }] },
+    contents,
+    ...(requireStructuredDiagram
+      ? {
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                reply: { type: "STRING" },
+                diagram: {
+                  type: "OBJECT",
+                  properties: {
+                    type: { type: "STRING", enum: ["flowchart", "concept"] },
+                    direction: { type: "STRING", enum: ["TD", "LR"] },
+                    nodes: {
+                      type: "ARRAY",
+                      items: {
                         type: "OBJECT",
                         properties: {
-                          type: { type: "STRING", enum: ["flowchart", "concept"] },
-                          direction: { type: "STRING", enum: ["TD", "LR"] },
-                          nodes: {
-                            type: "ARRAY",
-                            items: {
-                              type: "OBJECT",
-                              properties: {
-                                id: { type: "STRING" },
-                                label: { type: "STRING" },
-                              },
-                              required: ["id", "label"],
-                            },
-                          },
-                          edges: {
-                            type: "ARRAY",
-                            items: {
-                              type: "OBJECT",
-                              properties: {
-                                from: { type: "STRING" },
-                                to: { type: "STRING" },
-                                label: { type: "STRING" },
-                              },
-                              required: ["from", "to", "label"],
-                            },
-                          },
+                          id: { type: "STRING" },
+                          label: { type: "STRING" },
                         },
-                        required: ["type", "direction", "nodes", "edges"],
+                        required: ["id", "label"],
                       },
                     },
-                    required: ["reply", "diagram"],
+                    edges: {
+                      type: "ARRAY",
+                      items: {
+                        type: "OBJECT",
+                        properties: {
+                          from: { type: "STRING" },
+                          to: { type: "STRING" },
+                          label: { type: "STRING" },
+                        },
+                        required: ["from", "to", "label"],
+                      },
+                    },
                   },
+                  required: ["type", "direction", "nodes", "edges"],
                 },
-              }
-            : {}),
-        }),
-        signal: AbortSignal.timeout(GEMINI_REQUEST_TIMEOUT_MS),
-      },
-    );
-  } catch {
-    throw new Error("The AI tutor could not be reached. Please try again.");
+              },
+              required: ["reply", "diagram"],
+            },
+          },
+        }
+      : {}),
+  });
+
+  let response: Response | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      response = await fetch(
+        `${GEMINI_GENERATE_API}/${GEMINI_CHAT_MODEL}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: requestBody,
+          signal: AbortSignal.timeout(GEMINI_REQUEST_TIMEOUT_MS),
+        },
+      );
+    } catch {
+      if (attempt === 2) {
+        throw new Error("The AI tutor could not be reached after 3 attempts. Please try again.");
+      }
+    }
+
+    if (response?.ok) break;
+
+    const retryableStatus =
+      response !== undefined &&
+      [429, 500, 502, 503, 504].includes(response.status);
+    if (attempt === 2 || (response && !retryableStatus)) {
+      throw new Error("The AI tutor could not process the request. Please try again.");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+    response = undefined;
   }
 
-  if (!response.ok) {
+  if (!response?.ok) {
     throw new Error("The AI tutor could not process the request. Please try again.");
   }
 
