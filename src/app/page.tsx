@@ -49,16 +49,22 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [mobileTab, setMobileTab] = useState<"document" | "chat">("document");
   const [retryHint, setRetryHint] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const documentSessionRef = useRef(0);
   const learningProgress = useMemo(
     () => getLearningProgress(messages),
     [messages],
   );
 
-  // Auto-scroll chat to latest message
+  // Scroll only the chat history container; scrollIntoView can move the page
+  // itself when the chat is nested inside a full-height layout.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages, isLoading]);
 
   // When a document is uploaded, switch to chat on mobile if appropriate
@@ -377,7 +383,10 @@ export default function Home() {
           </section>
 
           {/* Scrollable message history */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4">
+          <div
+            ref={messagesContainerRef}
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4"
+          >
             {messages.map((msg, idx) => (
               <div
                 key={idx}
@@ -495,7 +504,6 @@ export default function Home() {
               </div>
             )}
 
-            <div ref={messagesEndRef} />
           </div>
 
           {/* Composer anchored to bottom of chat panel */}
