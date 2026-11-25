@@ -207,8 +207,12 @@ GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The student asked for a diagram and no relev
       apiKey,
       contents,
       tutorInstructions,
+      generalDiagramRequest,
     );
-    const tutorResponse = parseTutorResponse(generatedResponse, {
+    const normalizedResponse = generalDiagramRequest
+      ? normalizeGeneralDiagramResponse(generatedResponse)
+      : generatedResponse;
+    const tutorResponse = parseTutorResponse(normalizedResponse, {
       allowDiagram: generalDiagramRequest || (diagramRequest !== "none" && sources.length > 0),
       requireDiagram: diagramRequest === "required",
       allowUngroundedDiagram: generalDiagramRequest,
@@ -307,6 +311,7 @@ async function generateTutorReply(
   apiKey: string,
   contents: GeminiHistoryMessage[],
   tutorInstructions: string,
+  requireStructuredDiagram = false,
 ): Promise<string> {
   let response: Response;
 
@@ -322,6 +327,51 @@ async function generateTutorReply(
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: tutorInstructions }] },
           contents,
+          ...(requireStructuredDiagram
+            ? {
+                generationConfig: {
+                  responseMimeType: "application/json",
+                  responseSchema: {
+                    type: "OBJECT",
+                    properties: {
+                      reply: { type: "STRING" },
+                      diagram: {
+                        type: "OBJECT",
+                        properties: {
+                          type: { type: "STRING", enum: ["flowchart", "concept"] },
+                          direction: { type: "STRING", enum: ["TD", "LR"] },
+                          nodes: {
+                            type: "ARRAY",
+                            items: {
+                              type: "OBJECT",
+                              properties: {
+                                id: { type: "STRING" },
+                                label: { type: "STRING" },
+                              },
+                              required: ["id", "label"],
+                            },
+                          },
+                          edges: {
+                            type: "ARRAY",
+                            items: {
+                              type: "OBJECT",
+                              properties: {
+                                from: { type: "STRING" },
+                                to: { type: "STRING" },
+                                label: { type: "STRING" },
+                              },
+                              required: ["from", "to", "label"],
+                            },
+                          },
+                        },
+                        required: ["type", "direction", "nodes", "edges"],
+                      },
+                    },
+                    required: ["reply", "diagram"],
+                  },
+                },
+              }
+            : {}),
         }),
         signal: AbortSignal.timeout(GEMINI_REQUEST_TIMEOUT_MS),
       },
@@ -356,6 +406,27 @@ async function generateTutorReply(
   return reply;
 }
 
+
+function normalizeGeneralDiagramResponse(response: string): string {
+  try {
+    const parsed: unknown = JSON.parse(response);
+    if (
+      !isRecord(parsed) ||
+      typeof parsed.reply !== "string" ||
+      !isRecord(parsed.diagram)
+    ) {
+      return response;
+    }
+    return [
+      parsed.reply.trim(),
+      "```diagram-json",
+      JSON.stringify(parsed.diagram),
+      "```",
+    ].filter(Boolean).join("\n\n");
+  } catch {
+    return response;
+  }
+}
 
 function isGeneralDiagramRequest(message: string): boolean {
   const explicitlyGeneral =
