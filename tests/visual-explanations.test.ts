@@ -102,6 +102,9 @@ test("diagram instructions require source-indexed exact evidence", () => {
     /exact, case-sensitive evidence quote/i,
   );
   assert.match(getDiagramInstructions("required", true), /1-based/i);
+  assert.match(getDiagramInstructions("required", true), /preserve its actual values and execution order/i);
+  assert.match(getDiagramInstructions("required", true), /one connected node per CPU time slice/i);
+  assert.match(getDiagramInstructions("required", true), /not generic concept labels/i);
   assert.match(
     getDiagramInstructions("required", false),
     /do not invent nodes, steps, or relationships/i,
