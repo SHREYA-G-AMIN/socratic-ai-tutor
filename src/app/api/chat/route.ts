@@ -435,13 +435,13 @@ function normalizeGeneralDiagramResponse(response: string): string {
 
 function isDocumentOnlyDiagramRequest(message: string): boolean {
   return (
-    /\\b(?:based|drawn|generated)\\s+only\\s+on\\s+(?:the\\s+)?(?:my\\s+)?(?:uploaded\\s+)?(?:document|pdf|material)\\b/i.test(
+    /\b(?:based|drawn|generated)\s+only\s+on\s+(?:the\s+)?(?:my\s+)?(?:uploaded\s+)?(?:document|pdf|material)\b/i.test(
       message,
     ) ||
-    /\\buse\\s+only\\s+(?:the\\s+)?(?:my\\s+)?(?:uploaded\\s+)?(?:document|pdf|material)\\b/i.test(
+    /\buse\s+only\s+(?:the\s+)?(?:my\s+)?(?:uploaded\s+)?(?:document|pdf|material)\b/i.test(
       message,
     ) ||
-    /\\bonly\\s+from\\s+(?:the\\s+)?(?:my\\s+)?(?:uploaded\\s+)?(?:document|pdf|material)\\b/i.test(
+    /\bonly\s+from\s+(?:the\s+)?(?:my\s+)?(?:uploaded\s+)?(?:document|pdf|material)\b/i.test(
       message,
     )
   );
