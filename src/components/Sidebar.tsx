@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useAuth } from "@/lib/supabase/auth-context";
+import { createClient } from "@/lib/supabase/client";
 
 export interface NavItemConfig {
   id: string;
@@ -116,13 +119,96 @@ export function Sidebar({ className }: { className?: string }) {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border mt-auto flex items-center justify-between shrink-0">
-        <div className="flex flex-col">
-          <span className="text-xs font-medium text-text-primary">Theme</span>
-          <span className="text-[11px] text-text-muted">Appearance mode</span>
+      <div className="p-4 border-t border-border mt-auto space-y-3 shrink-0">
+        <AuthActions />
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-xs font-medium text-text-primary">Theme</span>
+            <span className="text-[11px] text-text-muted">Appearance mode</span>
+          </div>
+          <ThemeToggle />
         </div>
-        <ThemeToggle />
       </div>
     </aside>
+  );
+}
+
+export function AuthActions({
+  onNavigate,
+  authenticatedOnly = false,
+}: {
+  onNavigate?: () => void;
+  authenticatedOnly?: boolean;
+}) {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSignOut() {
+    setBusy(true);
+    setError("");
+
+    try {
+      const { error: signOutError } = await createClient().auth.signOut();
+      if (signOutError) throw signOutError;
+    } catch (cause) {
+      console.error(
+        "[navigation] sign out failed",
+        cause instanceof Error ? cause.message : "unknown error",
+      );
+      setError("Sign out could not be completed. Please try again.");
+      setBusy(false);
+      return;
+    }
+
+    onNavigate?.();
+    router.replace("/login");
+    router.refresh();
+  }
+
+  if (loading) {
+    return <div className="h-9" aria-hidden="true" />;
+  }
+
+  if (!user) {
+    if (authenticatedOnly) return null;
+
+    return (
+      <div className="flex gap-2">
+        <Link
+          href="/login"
+          onClick={onNavigate}
+          className="flex-1 rounded-lg border border-border px-3 py-2 text-center text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
+        >
+          Log in
+        </Link>
+        <Link
+          href="/signup"
+          onClick={onNavigate}
+          className="flex-1 rounded-lg bg-accent-primary px-3 py-2 text-center text-sm font-semibold text-white hover:bg-accent-primary-hover transition-colors"
+        >
+          Sign up
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => void handleSignOut()}
+        disabled={busy}
+        className="w-full rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? "Signing out…" : "Log out"}
+      </button>
+      {error && (
+        <p role="alert" className="text-xs text-error-text">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

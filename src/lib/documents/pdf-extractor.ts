@@ -11,6 +11,7 @@ import {
 import { DocumentProcessingError } from "./errors";
 import { recognizeScannedPdf } from "./ocr";
 import { recognizeScannedPdfLocally } from "./local-ocr";
+import { sanitizePdfText } from "./text-sanitization";
 import type { DocumentPageRange } from "@/types/document";
 
 export interface PdfExtraction {
@@ -225,7 +226,7 @@ async function withTimeout<T>(
  * (and later the chunking step) a predictable string to work with.
  */
 function normalizeText(text: string): string {
-  return text
+  return sanitizePdfText(text)
     .replace(/\r\n?/g, "\n")
     .replace(/\u00ad/g, "")
     .replace(/\u00a0/g, " ")

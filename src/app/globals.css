@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
+
   /* === Light mode — Warm Ivory / Botanical Editorial === */
   --background: #FAF7F2;
   --surface: #FFFFFF;
@@ -89,6 +91,8 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
+
   /* === Dark mode — Midnight Garden === */
   --background: #171421;
   --surface: #1E1B28;

@@ -1,8 +1,96 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 
 register("./server-only-hook.mjs", import.meta.url);
+
+const TEST_USER_ID = "test-user";
+const TEST_DOCUMENT_ID = "test-document";
+
+interface SavedDocumentFixture {
+  id: string;
+  user_id: string;
+  file_name: string;
+  extracted_text: string;
+  page_ranges: unknown;
+}
+
+let authenticatedUser: { id: string } | null = { id: TEST_USER_ID };
+let savedDocument: SavedDocumentFixture | null = null;
+let savedDocumentSequence = 0;
+
+function createSupabaseMock() {
+  return {
+    auth: {
+      async getUser() {
+        return { data: { user: authenticatedUser }, error: null };
+      },
+    },
+    from(table: string) {
+      if (table === "documents") {
+        const filters = new Map<string, unknown>();
+        const query = {
+          select() {
+            return query;
+          },
+          eq(column: string, value: unknown) {
+            filters.set(column, value);
+            return query;
+          },
+          async maybeSingle() {
+            const matches =
+              savedDocument !== null &&
+              [...filters].every(
+                ([column, value]) =>
+                  savedDocument?.[column as keyof SavedDocumentFixture] === value,
+              );
+            return { data: matches ? savedDocument : null, error: null };
+          },
+        };
+        return query;
+      }
+
+      if (table === "conversations") {
+        const query = {
+          insert() {
+            return query;
+          },
+          update() {
+            return query;
+          },
+          eq() {
+            return query;
+          },
+          select() {
+            return query;
+          },
+          async single() {
+            return { data: { id: "test-conversation" }, error: null };
+          },
+          async maybeSingle() {
+            return { data: { id: "test-conversation" }, error: null };
+          },
+        };
+        return query;
+      }
+
+      throw new Error(`Unexpected Supabase table: ${table}`);
+    },
+  };
+}
+
+const supabaseModuleMockOptions = {
+  exports: {
+    createClient: async () => createSupabaseMock(),
+  },
+} as NonNullable<Parameters<typeof mock.module>[1]> & {
+  exports: Record<string, unknown>;
+};
+
+mock.module(
+  new URL("../src/lib/supabase/server.ts", import.meta.url).href,
+  supabaseModuleMockOptions,
+);
 
 const { POST } = await import("../src/app/api/chat/route.ts");
 
@@ -52,6 +140,28 @@ function makeRequest(body: unknown): Request {
   });
 }
 
+function makeSavedDocumentRequest(
+  body: Record<string, unknown>,
+  extractedText: string,
+  options: {
+    fileName?: string;
+    pageRanges?: unknown;
+    ownerId?: string;
+  } = {},
+): Request {
+  authenticatedUser = { id: TEST_USER_ID };
+  const documentId = `${TEST_DOCUMENT_ID}-${++savedDocumentSequence}`;
+  savedDocument = {
+    id: documentId,
+    user_id: options.ownerId ?? TEST_USER_ID,
+    file_name: options.fileName ?? "test.pdf",
+    extracted_text: extractedText,
+    page_ranges: options.pageRanges ?? null,
+  };
+
+  return makeRequest({ ...body, documentId });
+}
+
 function makeTutorResponse(text: string): Response {
   return Response.json({
     candidates: [{ content: { parts: [{ text }] } }],
@@ -63,13 +173,75 @@ test("invalid JSON, malformed bodies, and empty chat inputs return 400", async (
     for (const body of [
       "{",
       "null",
-      JSON.stringify({ message: "", documentText: "document" }),
-      JSON.stringify({ message: "question", documentText: "" }),
-      JSON.stringify({ message: "  ", documentText: "document" }),
+      JSON.stringify({ message: "", documentId: TEST_DOCUMENT_ID }),
+      JSON.stringify({ message: "question" }),
+      JSON.stringify({ message: "  ", documentId: TEST_DOCUMENT_ID }),
     ]) {
       const response = await POST(makeRequest(body));
       assert.equal(response.status, 400);
     }
+  });
+});
+
+test("unauthenticated requests are rejected before document access or provider calls", async () => {
+  authenticatedUser = null;
+  savedDocument = {
+    id: TEST_DOCUMENT_ID,
+    user_id: TEST_USER_ID,
+    file_name: "test.pdf",
+    extracted_text: "Saved document text.",
+    page_ranges: null,
+  };
+
+  await withApiKey("test-key", async () => {
+    await withFetch(async () => {
+      assert.fail("providers must not be called for unauthenticated requests");
+    }, async () => {
+      const response = await POST(
+        makeRequest({
+          message: "Explain the document",
+          documentId: TEST_DOCUMENT_ID,
+        }),
+      );
+
+      assert.equal(response.status, 401);
+      assert.deepEqual(await response.json(), {
+        error: "Authentication required",
+      });
+    });
+  });
+});
+
+test("missing and unowned documents return 404", async () => {
+  authenticatedUser = { id: TEST_USER_ID };
+  await withApiKey("test-key", async () => {
+    await withFetch(async () => {
+      assert.fail("providers must not be called when document access is denied");
+    }, async () => {
+      savedDocument = null;
+      const missingResponse = await POST(
+        makeRequest({
+          message: "Explain the document",
+          documentId: TEST_DOCUMENT_ID,
+        }),
+      );
+      assert.equal(missingResponse.status, 404);
+
+      savedDocument = {
+        id: TEST_DOCUMENT_ID,
+        user_id: "another-user",
+        file_name: "test.pdf",
+        extracted_text: "Another user's document.",
+        page_ranges: null,
+      };
+      const unownedResponse = await POST(
+        makeRequest({
+          message: "Explain the document",
+          documentId: TEST_DOCUMENT_ID,
+        }),
+      );
+      assert.equal(unownedResponse.status, 404);
+    });
   });
 });
 
@@ -79,7 +251,10 @@ test("missing Gemini API key returns 503 without calling providers", async () =>
       assert.fail("providers must not be called without an API key");
     }, async () => {
       const response = await POST(
-        makeRequest({ message: "Explain photosynthesis", documentText: "Text" }),
+        makeSavedDocumentRequest(
+          { message: "Explain photosynthesis" },
+          "Text",
+        ),
       );
 
       assert.equal(response.status, 503);
@@ -91,7 +266,10 @@ test("missing Gemini API key returns 503 without calling providers", async () =>
 test("empty but valid document text returns the existing empty-content contract", async () => {
   await withApiKey("test-key", async () => {
     const response = await POST(
-      makeRequest({ message: "Explain photosynthesis", documentText: " \n " }),
+      makeSavedDocumentRequest(
+        { message: "Explain photosynthesis" },
+        " \n ",
+      ),
     );
 
     assert.equal(response.status, 200);
@@ -103,13 +281,18 @@ test("empty but valid document text returns the existing empty-content contract"
   });
 });
 
-test("keyword fallback keeps citations, explicit format, confusion adaptation, and history diagrams", async () => {
+test("semantic retrieval keeps citations, explicit format, confusion adaptation, and history diagrams", async () => {
   await withApiKey("test-key", async () => {
     let geminiRequest: Record<string, unknown> | undefined;
     await withFetch(async (input, init) => {
       const url = String(input);
       if (url.includes("batchEmbedContents")) {
-        return new Response("provider unavailable", { status: 503 });
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<{ taskType: string }>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(() => ({ values: [1, 0] })),
+        });
       }
 
       assert.match(url, /:generateContent$/);
@@ -149,11 +332,8 @@ test("keyword fallback keeps citations, explicit format, confusion adaptation, a
       const documentText =
         "Photosynthesis captures light energy and stores it as chemical energy in plants.";
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "I don't understand; summarize the photosynthesis process and draw a flowchart",
-          documentText,
-          fileName: "biology.pdf",
-          pageRanges: [{ pageNumber: 3, startChar: 0, endChar: documentText.length }],
           history: [
             { role: "student", text: "Why does photosynthesis need light?" },
             {
@@ -162,13 +342,15 @@ test("keyword fallback keeps citations, explicit format, confusion adaptation, a
               diagram: "flowchart TD\n  Sunlight --> Energy",
             },
           ],
+        }, documentText, {
+          fileName: "biology.pdf",
+          pageRanges: [{ pageNumber: 3, startChar: 0, endChar: documentText.length }],
         }),
       );
 
       assert.equal(response.status, 200);
       const body = await response.json();
-      assert.equal(body.retrievalMode, "keyword");
-      assert.match(body.warning, /embedding provider/i);
+      assert.equal(body.retrievalMode, "semantic");
       assert.equal(body.reply, "Photosynthesis captures light energy.");
       assert.match(body.diagram, /^flowchart TD/);
       assert.equal(body.diagramData.type, "flowchart");
@@ -228,10 +410,9 @@ test("high-scoring unrelated semantic retrieval declines without Gemini or misle
       );
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "What is the capital of France?",
-          documentText: "A binary search tree stores keys for efficient lookup.",
-        }),
+        }, "A binary search tree stores keys for efficient lookup."),
       );
 
       assert.equal(response.status, 200);
@@ -315,12 +496,10 @@ Binary tree; root; node; left subtree; right subtree; search; insertion; deletio
       );
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message:
             "Why does a BST compare the target value with the current node before choosing a subtree?",
-          documentText,
-          fileName: "bst_text_extraction_test.pdf",
-        }),
+        }, documentText, { fileName: "bst_text_extraction_test.pdf" }),
       );
 
       assert.equal(response.status, 200);
@@ -377,10 +556,9 @@ test("a document summary falls back to document passages when semantic scores ar
       return makeTutorResponse("**Overview**\nThe document records observations.");
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "Summarize my PDF",
-          documentText: "The expedition log records dates, locations, and weather observations.",
-        }),
+        }, "The expedition log records dates, locations, and weather observations."),
       );
 
       assert.equal(response.status, 200);
@@ -394,32 +572,38 @@ test("a document summary falls back to document passages when semantic scores ar
   });
 });
 
-test("weak keyword fallback match declines without Gemini or citations", async () => {
+test("weak semantic matches decline without Gemini or citations", async () => {
   await withApiKey("test-key", async () => {
     let generationRequested = false;
-    await withFetch(async (input) => {
+    await withFetch(async (input, init) => {
       if (String(input).includes("batchEmbedContents")) {
-        return new Response("provider unavailable", { status: 503 });
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<{ taskType: string }>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(({ taskType }) => ({
+            values: taskType === "RETRIEVAL_QUERY" ? [1, 0] : [0, 1],
+          })),
+        });
       }
 
       generationRequested = true;
       return makeTutorResponse("Unsupported response.");
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "Explain binary recursion algorithms",
-          documentText: "This note mentions a binary tree.",
-        }),
+        }, "This note mentions a binary tree."),
       );
 
       assert.equal(response.status, 200);
       const body = await response.json();
       assert.deepEqual(body.sources, []);
+      assert.equal(body.retrievalMode, "semantic");
       assert.equal(
         body.reply,
         "I couldn't find supporting information for that question in the uploaded material.",
       );
-      assert.equal(body.retrievalMode, "keyword");
       assert.equal(generationRequested, false);
     });
   });
@@ -455,14 +639,13 @@ test("short supported follow-ups use student context, retain history, and cite r
           "Photosynthesis captures light energy and stores it as chemical energy in plants.";
         const previousTutorAnswer = "The process works because of moon crystals.";
         const response = await POST(
-          makeRequest({
+          makeSavedDocumentRequest({
             message: followUp,
-            documentText,
             history: [
               { role: "student", text: "What does photosynthesis do?" },
               { role: "tutor", text: previousTutorAnswer },
             ],
-          }),
+          }, documentText),
         );
 
         assert.equal(response.status, 200);
@@ -496,6 +679,7 @@ test("an unsupported follow-up does not use a prior tutor answer as retrieval ev
   await withApiKey("test-key", async () => {
     let generationRequested = false;
     let retrievalQuery = "";
+    let geminiRequest: Record<string, unknown> | undefined;
     await withFetch(async (input, init) => {
       const url = String(input);
       if (url.includes("batchEmbedContents")) {
@@ -515,12 +699,12 @@ test("an unsupported follow-up does not use a prior tutor answer as retrieval ev
       }
 
       generationRequested = true;
+      geminiRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return makeTutorResponse("Unsupported answer.");
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "Why?",
-          documentText: "Photosynthesis captures light energy.",
           history: [
             { role: "student", text: "What causes photosynthesis?" },
             {
@@ -528,19 +712,22 @@ test("an unsupported follow-up does not use a prior tutor answer as retrieval ev
               text: "Photosynthesis is caused by moon crystals.",
             },
           ],
-        }),
+        }, "Photosynthesis captures light energy."),
       );
 
       assert.equal(response.status, 200);
       const body = await response.json();
-      assert.deepEqual(body.sources, []);
-      assert.equal(
-        body.reply,
-        "I couldn't find supporting information for that question in the uploaded material.",
-      );
+      assert.equal(body.sources.length, 1);
+      assert.equal(body.sources[0].text, "Photosynthesis captures light energy.");
       assert.match(retrievalQuery, /What causes photosynthesis\?/);
       assert.doesNotMatch(retrievalQuery, /moon crystals/i);
-      assert.equal(generationRequested, false);
+      assert.equal(generationRequested, true);
+      assert.ok(geminiRequest);
+      const request = geminiRequest as {
+        contents: Array<{ role: string; parts: Array<{ text: string }> }>;
+      };
+      assert.match(request.contents.at(-1)?.parts[0].text ?? "", /Passage 1/);
+      assert.match(request.contents.at(-1)?.parts[0].text ?? "", /Photosynthesis captures light energy/);
     });
   });
 });
@@ -551,7 +738,12 @@ test("repeated corrected answers trigger a different high-support strategy", asy
     await withFetch(async (input, init) => {
       const url = String(input);
       if (url.includes("batchEmbedContents")) {
-        return new Response("provider unavailable", { status: 503 });
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<unknown>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(() => ({ values: [1, 0] })),
+        });
       }
 
       geminiRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -560,10 +752,8 @@ test("repeated corrected answers trigger a different high-support strategy", asy
       );
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "The target is smaller; right child.",
-          documentText:
-            "If the target is smaller than the current node, continue to the left child. If the target is larger than the current node, continue to the right child.",
           history: [
             {
               role: "tutor",
@@ -575,12 +765,12 @@ test("repeated corrected answers trigger a different high-support strategy", asy
               text: "Not quite. The passage directs a smaller target to the left child.",
             },
           ],
-        }),
+        }, "If the target is smaller than the current node, continue to the left child. If the target is larger than the current node, continue to the right child."),
       );
 
       assert.equal(response.status, 200);
       const body = await response.json();
-      assert.equal(body.retrievalMode, "keyword");
+      assert.equal(body.retrievalMode, "semantic");
       assert.ok(body.sources.length > 0);
       assert.ok(geminiRequest);
       const request = geminiRequest as {
@@ -613,11 +803,9 @@ test("partially supported multi-part questions decline without Gemini", async ()
       return makeTutorResponse("Unsupported additional claim.");
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "Explain binary search tree properties and photosynthesis",
-          documentText:
-            "A binary search tree has properties that support efficient key lookup.",
-        }),
+        }, "A binary search tree has properties that support efficient key lookup."),
       );
 
       assert.equal(response.status, 200);
@@ -632,7 +820,7 @@ test("partially supported multi-part questions decline without Gemini", async ()
   });
 });
 
-test("keyword fallback declines a partially supported multi-part question", async () => {
+test("embedding failure on a partially supported multi-part question fails closed", async () => {
   await withApiKey("test-key", async () => {
     let generationRequested = false;
     await withFetch(async (input) => {
@@ -644,17 +832,16 @@ test("keyword fallback declines a partially supported multi-part question", asyn
       return makeTutorResponse("Unsupported additional claim.");
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "Explain binary search tree properties and photosynthesis",
-          documentText:
-            "A binary search tree has properties that support efficient key lookup.",
-        }),
+        }, "A binary search tree has properties that support efficient key lookup."),
       );
 
-      assert.equal(response.status, 200);
-      const body = await response.json();
-      assert.deepEqual(body.sources, []);
-      assert.equal(body.retrievalMode, "keyword");
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), {
+        error: "Semantic retrieval is temporarily unavailable. Please try again.",
+        code: "SEMANTIC_RETRIEVAL_UNAVAILABLE",
+      });
       assert.equal(generationRequested, false);
     });
   });
@@ -678,11 +865,9 @@ test("an unrelated question with incidental term overlap declines without Gemini
       return makeTutorResponse("Unsupported capital claim.");
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "What is the capital of France?",
-          documentText:
-            "This note describes capital allocation within a binary search tree.",
-        }),
+        }, "This note describes capital allocation within a binary search tree."),
       );
 
       assert.equal(response.status, 200);
@@ -715,9 +900,9 @@ test("a document summary can retrieve relevant passages without lexical overlap"
       return makeTutorResponse("**Overview**\nThe passage describes binary search trees.");
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "Summarize my PDF",
-          documentText: "A binary search tree stores keys for efficient lookup.",
+        }, "A binary search tree stores keys for efficient lookup.", {
           fileName: "algorithms.pdf",
         }),
       );
@@ -735,6 +920,8 @@ test("a document summary can retrieve relevant passages without lexical overlap"
 
 test("a model-generated diagram is omitted when the student did not request one", async () => {
   await withApiKey("test-key", async () => {
+    const passage =
+      "The short-term scheduler selects a process from the ready queue.";
     await withFetch(async (input, init) => {
       const url = String(input);
       if (url.includes("batchEmbedContents")) {
@@ -747,25 +934,106 @@ test("a model-generated diagram is omitted when the student did not request one"
       }
 
       return makeTutorResponse(
-        `The passage describes plant cells.\n\`\`\`diagram-json\n${JSON.stringify({
+        `The short-term scheduler selects a process.\n\`\`\`diagram-json\n${JSON.stringify({
           type: "flowchart",
           direction: "TD",
-          nodes: [],
-          edges: [],
+          nodes: [
+            {
+              id: "scheduler",
+              label: "short-term scheduler",
+              sourceIndex: 1,
+              evidence: passage,
+            },
+            {
+              id: "process",
+              label: "process",
+              sourceIndex: 1,
+              evidence: passage,
+            },
+          ],
+          edges: [
+            {
+              from: "scheduler",
+              to: "process",
+              label: "selects",
+              sourceIndex: 1,
+              evidence: passage,
+            },
+          ],
         })}\n\`\`\``,
       );
     }, async () => {
       const response = await POST(
-        makeRequest({
-          message: "What does this document say about plant cells?",
-          documentText: "Plant cells contain chloroplasts.",
-        }),
+        makeSavedDocumentRequest({
+          message: "What does the process scheduler do?",
+        }, passage),
       );
 
       const body = await response.json();
       assert.equal(body.diagram, undefined);
-      assert.equal(body.reply, "The passage describes plant cells.");
+      assert.equal(body.reply, "The short-term scheduler selects a process.");
       assert.equal(body.sources.length, 1);
+    });
+  });
+});
+
+test("Gantt diagrams are validated against retrieved schedule evidence", async () => {
+  await withApiKey("test-key", async () => {
+    const passage = "Round Robin schedule Gantt chart: P1 0-2, P2 2-4.";
+    let geminiRequest: Record<string, unknown> | undefined;
+    await withFetch(async (input, init) => {
+      if (String(input).includes("batchEmbedContents")) {
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<unknown>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(() => ({ values: [1, 0] })),
+        });
+      }
+
+      geminiRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeTutorResponse(
+        `The schedule runs P1, then P2.\n\`\`\`diagram-json\n${JSON.stringify({
+          type: "flowchart",
+          direction: "LR",
+          nodes: [
+            { id: "p1", label: "P1 0-2", sourceIndex: 1, evidence: passage },
+            { id: "p2", label: "P2 2-4", sourceIndex: 1, evidence: passage },
+          ],
+          edges: [
+            {
+              from: "p1",
+              to: "p2",
+              label: "next",
+              sourceIndex: 1,
+              evidence: passage,
+            },
+          ],
+        })}\n\`\`\``,
+      );
+    }, async () => {
+      const response = await POST(
+        makeSavedDocumentRequest(
+          { message: "Gantt chart of the Round Robin schedule" },
+          passage,
+        ),
+      );
+
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.ok(body.diagram, JSON.stringify(body));
+      assert.match(body.diagram, /P1 0-2/);
+      assert.match(body.diagram, /P2 2-4/);
+      assert.equal(body.sources.length, 1);
+      assert.equal(body.sources[0].text, passage);
+      assert.ok(geminiRequest);
+      const request = geminiRequest as {
+        systemInstruction: { parts: Array<{ text: string }> };
+      };
+      assert.match(
+        request.systemInstruction.parts[0].text,
+        /include all evidenced slices in chronological order/i,
+      );
     });
   });
 });
@@ -817,11 +1085,10 @@ test("an unsupported diagram claim is omitted while its answer and citations rem
       );
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message:
             "I don't understand; summarize the photosynthesis process and draw a flowchart",
-          documentText: passage,
-        }),
+        }, passage),
       );
 
       assert.equal(response.status, 200);
@@ -840,7 +1107,12 @@ test("chat history is bounded to the latest twelve valid turns", async () => {
     let geminiRequest: Record<string, unknown> | undefined;
     await withFetch(async (input, init) => {
       if (String(input).includes("batchEmbedContents")) {
-        return new Response("provider unavailable", { status: 503 });
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<unknown>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(() => ({ values: [1, 0] })),
+        });
       }
 
       geminiRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -851,12 +1123,10 @@ test("chat history is bounded to the latest twelve valid turns", async () => {
         text: `Conversation turn ${index}`,
       }));
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "Explain binary search tree nodes",
-          documentText:
-            "A binary search tree stores ordered values in nodes. Smaller values go left and larger values go right.",
           history,
-        }),
+        }, "A binary search tree stores ordered values in nodes. Smaller values go left and larger values go right."),
       );
 
       assert.equal(response.status, 200);
@@ -877,10 +1147,15 @@ test("chat history is bounded to the latest twelve valid turns", async () => {
 test("returns a clear 503 when Gemini remains unavailable after retries", async () => {
   await withApiKey("test-key", async () => {
     let generationAttempts = 0;
-    await withFetch(async (input) => {
+    await withFetch(async (input, init) => {
       const url = String(input);
       if (url.includes("batchEmbedContents")) {
-        return new Response("embedding provider unavailable", { status: 503 });
+        const requestBody = JSON.parse(String(init?.body)) as {
+          requests: Array<unknown>;
+        };
+        return Response.json({
+          embeddings: requestBody.requests.map(() => ({ values: [1, 0] })),
+        });
       }
       if (url.includes(":generateContent")) {
         generationAttempts += 1;
@@ -889,11 +1164,9 @@ test("returns a clear 503 when Gemini remains unavailable after retries", async 
       assert.fail(`unexpected provider request: ${url}`);
     }, async () => {
       const response = await POST(
-        makeRequest({
+        makeSavedDocumentRequest({
           message: "Explain binary search trees",
-          documentText:
-            "A binary search tree stores keys. Values smaller than a node go into its left subtree, and larger values go into its right subtree.",
-        }),
+        }, "A binary search tree stores keys. Values smaller than a node go into its left subtree, and larger values go into its right subtree."),
       );
 
       assert.equal(response.status, 503);

@@ -6,7 +6,10 @@ import {
 import { detectConfusion } from "@/lib/ai/confusion-detection";
 import {
   MAX_MERMAID_SOURCE_LENGTH,
+  getDiagramConstraint,
+  getDiagramConstraintInstructions,
   getDiagramRequest,
+  isExplicitGeneralDiagramRequest,
   parseTutorResponse,
 } from "@/lib/ai/visual-explanations";
 import { EmbeddingProviderError } from "@/lib/documents/embeddings";
@@ -28,8 +31,6 @@ import { createClient } from "@/lib/supabase/server";
 const MAX_RETRIEVED_CHUNKS = 3;
 const MAX_MESSAGE_LENGTH = 2_000;
 const MAX_HISTORY_TURNS = 12;
-const CHUNK_SIZE = 500;
-const CHUNK_OVERLAP = 100;
 const GEMINI_CHAT_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_GENERATE_API =
   "https://generativelanguage.googleapis.com/v1beta/models";
@@ -116,10 +117,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const chunks = chunkText(documentText, {
-      chunkSize: CHUNK_SIZE,
-      chunkOverlap: CHUNK_OVERLAP,
-    });
+    const chunks = chunkText(documentText);
 
     if (chunks.length === 0) {
       return NextResponse.json({
@@ -161,22 +159,7 @@ export async function POST(request: Request) {
         );
       }
     } catch (error) {
-      retrievalMode = "keyword";
-      warning =
-        error instanceof EmbeddingProviderError
-          ? error.message
-          : "Semantic retrieval is unavailable. Showing keyword matches instead.";
-      console.error(
-        "[api/chat] semantic retrieval unavailable; using keyword fallback",
-        error instanceof EmbeddingProviderError ? error.code : "UNKNOWN_ERROR",
-      );
-      relevant = retrieveRelevantChunks(
-        chunks,
-        retrievalMessage,
-        MAX_RETRIEVED_CHUNKS,
-        pageRanges,
-        { minimumMatches: intent === "summary" ? 0 : undefined },
-      );
+      return semanticRetrievalFailure(error, "primary");
     }
 
     // If the student is answering or replying inside an ongoing Socratic turn
@@ -196,14 +179,8 @@ export async function POST(request: Request) {
               requireLexicalCorroboration: false,
             },
           );
-        } catch {
-          relevant = retrieveRelevantChunks(
-            chunks,
-            priorContextQuery,
-            MAX_RETRIEVED_CHUNKS,
-            pageRanges,
-            { minimumMatches: 0 },
-          );
+        } catch (error) {
+          return semanticRetrievalFailure(error, "conversation-context");
         }
       }
       if (relevant.length === 0 && !priorContextQuery) {
@@ -228,24 +205,14 @@ export async function POST(request: Request) {
     }));
 
     const diagramRequest = getDiagramRequest(currentMessage);
+    const diagramConstraint =
+      diagramRequest === "none" ? undefined : getDiagramConstraint(currentMessage);
     const documentOnlyDiagramRequest =
       isDocumentOnlyDiagramRequest(currentMessage);
-    const conversationTopic = [
-      currentMessage,
-      ...history.filter((turn) => turn.role === "user").map((turn) =>
-        turn.parts.map((part) => part.text).join(""),
-      ),
-    ].join(" ");
-    const roundRobinNeedsIllustrativeExample =
-      /round\s*robin/i.test(conversationTopic) &&
-      !sources.some((source) => /round\s*robin|time quantum|time slice.{0,30}(?:p[1-9]|process)|p[1-9].{0,30}(?:ms|milliseconds)/i.test(source.text));
     const generalDiagramRequest =
       !documentOnlyDiagramRequest &&
-      (isGeneralDiagramRequest(currentMessage) ||
-        roundRobinNeedsIllustrativeExample ||
-        (diagramRequest === "required" &&
-          history.length > 0 &&
-          sources.length === 0));
+      !diagramConstraint &&
+      isExplicitGeneralDiagramRequest(currentMessage);
 
     if (sources.length === 0 && !generalDiagramRequest) {
       const noEvidenceReply = "I couldn't find supporting information for that question in the uploaded material.";
@@ -330,11 +297,16 @@ export async function POST(request: Request) {
       generalDiagramRequest ? "none" : diagramRequest,
       true,
     );
+    const diagramConstraintInstructions = generalDiagramRequest
+      ? ""
+      : getDiagramConstraintInstructions(diagramConstraint);
     const tutorInstructions = generalDiagramRequest
       ? `${baseInstructions}
 
-GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The requested topic or worked-example details are not present in the retrieved document passages, or the student explicitly asked for general knowledge. For the diagram only, use reliable general knowledge about the topic in the recent conversation. Do not claim the illustrative values, steps, or example came from the PDF. Clearly label the diagram and any illustrative example as a general example, separate from the document-supported facts. If the request asks for a timeline or worked example, use a concrete internally consistent example with named processes, a stated quantum, chronological time slices, and cumulative time boundaries. For Round Robin, ensure each slice's process and duration are explicit and show a process returning to the ready queue only when it has remaining burst time. Return exactly one diagram-json block with strict JSON and exactly this shape: {"type":"flowchart"|"concept","direction":"TD"|"LR","nodes":[{"id":"user","label":"User"}],"edges":[{"from":"user","to":"application","label":"uses"}]}. Use 2-12 nodes and 1-20 edges. Node objects must contain only id and label; edge objects only from, to, and label. Labels must be concise, factual, and safe for Mermaid. Do not include sourceIndex or evidence fields. Do not output SVG, HTML, Mermaid syntax, or a separate diagram description. The only diagram representation must be the single diagram-json block. Do not omit the diagram block. Keep prose brief.`
-      : baseInstructions;
+GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The student explicitly requested a general-knowledge diagram. Use reliable general knowledge only for that diagram; keep it separate from document-supported facts and label any invented values, steps, or example as general. Do not substitute a general example when the student asks about a document example or its numerical inputs. If the request asks for a timeline or worked example, use a concrete internally consistent example with named processes, a stated quantum, chronological time slices, and cumulative time boundaries. For Round Robin, ensure each slice's process and duration are explicit and show a process returning to the ready queue only when it has remaining burst time. Return exactly one diagram-json block with strict JSON and exactly this shape: {"type":"flowchart"|"concept","direction":"TD"|"LR","nodes":[{"id":"user","label":"User"}],"edges":[{"from":"user","to":"application","label":"uses"}]}. Use 2-12 nodes and 1-20 edges. Node objects must contain only id and label; edge objects only from, to, and label. Labels must be concise, factual, and safe for Mermaid. Do not include sourceIndex or evidence fields. Do not output SVG, HTML, Mermaid syntax, or a separate diagram description. The only diagram representation must be the single diagram-json block. Do not omit the diagram block. Keep prose brief.`
+      : diagramConstraintInstructions
+        ? `${baseInstructions}\n\n${diagramConstraintInstructions}`
+        : baseInstructions;
     const generatedResponse = await generateTutorReply(
       apiKey,
       contents,
@@ -349,6 +321,7 @@ GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The requested topic or worked-example detail
       requireDiagram: diagramRequest === "required",
       allowUngroundedDiagram: generalDiagramRequest,
       sourcePassages: sources.map((source) => source.text),
+      diagramConstraint: generalDiagramRequest ? undefined : diagramConstraint,
     });
 
     const previousMessages = Array.isArray(body.history)
@@ -431,6 +404,33 @@ GENERAL-KNOWLEDGE DIAGRAM OVERRIDE: The requested topic or worked-example detail
   }
 }
 
+function semanticRetrievalFailure(
+  error: unknown,
+  phase: "primary" | "conversation-context",
+): NextResponse {
+  const diagnostics =
+    error instanceof EmbeddingProviderError
+      ? {
+          code: error.code,
+          httpStatus: error.httpStatus,
+          providerStatus: error.providerStatus,
+          providerCode: error.providerCode,
+        }
+      : {
+          code: "UNEXPECTED_ERROR",
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        };
+
+  console.error(`[api/chat] ${phase} semantic retrieval failed`, diagnostics);
+  return NextResponse.json(
+    {
+      error: "Semantic retrieval is temporarily unavailable. Please try again.",
+      code: "SEMANTIC_RETRIEVAL_UNAVAILABLE",
+    },
+    { status: 503 },
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -465,9 +465,18 @@ function buildRetrievalMessage(
   message: string,
   history: GeminiHistoryMessage[],
 ): string {
+  const queryTerms = getContentQueryTerms(message);
+  const hasSpecificSchedulingFact = queryTerms.some((term) =>
+    /^(?:p\d+|roundrobin|quantum|arrival|burst|scheduleorder|sjf|starvation|contextswitch)$/.test(
+      term,
+    ),
+  );
   const isContextDependentFollowUp =
-    /\b(?:hint|help|stuck|confused|clue|nudge|try again|due to|because)\b/i.test(message) ||
-    getContentQueryTerms(message).length <= 2;
+    !hasSpecificSchedulingFact &&
+    (/\b(?:hint|help|stuck|confused|clue|nudge|try again|due to|because)\b/i.test(
+      message,
+    ) ||
+      queryTerms.length <= 2);
 
   if (!isContextDependentFollowUp) {
     return message;
@@ -671,14 +680,6 @@ function isDocumentOnlyDiagramRequest(message: string): boolean {
       message,
     )
   );
-}
-
-function isGeneralDiagramRequest(message: string): boolean {
-  const explicitlyGeneral =
-    /\b(?:general|in general|on (?:your|ur) own|by yourself|outside (?:the )?(?:document|pdf|material)|not (?:from|based on) (?:the )?(?:document|pdf|material)|use (?:your )?(?:general )?knowledge)\b/i.test(message);
-  const asksForDiagram =
-    /\b(?:diagrams?|daigrams?|draw|visual|flowchart|concept map)\b/i.test(message);
-  return explicitlyGeneral && asksForDiagram;
 }
 
 function parsePageRanges(

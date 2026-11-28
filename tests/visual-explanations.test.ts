@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 
 import {
   diagramToMermaidSource,
+  getDiagramConstraint,
+  getDiagramConstraintInstructions,
   getDiagramRequest,
   getDiagramInstructions,
+  isExplicitGeneralDiagramRequest,
   parseTutorResponse,
   renderMermaidSafely,
   validateGroundedDiagram,
@@ -78,6 +81,32 @@ function tutorResponse(diagram: unknown): string {
 
 test("explicit diagram requests require structured diagram output", () => {
   assert.equal(getDiagramRequest("Draw a flowchart of the process"), "required");
+  assert.equal(getDiagramRequest("Gantt chart of the Round Robin example"), "required");
+});
+
+test("general diagrams require an explicit general-knowledge request", () => {
+  assert.equal(
+    isExplicitGeneralDiagramRequest(
+      "Draw a diagram using general knowledge about Round Robin",
+    ),
+    true,
+  );
+  assert.equal(
+    isExplicitGeneralDiagramRequest(
+      "Draw the main Round Robin example from my document",
+    ),
+    false,
+  );
+  assert.equal(
+    isExplicitGeneralDiagramRequest(
+      "What does a diagram using general knowledge explain?",
+    ),
+    false,
+  );
+  assert.equal(
+    getDiagramRequest("Explain this visual explanation in general terms"),
+    "none",
+  );
   assert.equal(getDiagramRequest("Make a concept map"), "required");
 });
 
@@ -94,6 +123,113 @@ test("process and sequence questions can benefit from an optional diagram", () =
 
 test("ordinary questions do not request diagrams", () => {
   assert.equal(getDiagramRequest("What is ATP?"), "none");
+  assert.equal(getDiagramRequest("What does the process scheduler do?"), "none");
+  assert.equal(getDiagramRequest("What is a Gantt chart?"), "none");
+  assert.equal(getDiagramRequest("I don't want a Gantt chart, just the exact quantum"), "none");
+});
+
+const ganttPassage =
+  "RR Gantt timeline: P1 0-2, P2 2-4, P3 4-6.";
+const ganttDiagram: DiagramData = {
+  type: "flowchart",
+  direction: "LR",
+  nodes: [
+    { id: "p1_first", label: "P1 0-2", sourceIndex: 1, evidence: ganttPassage },
+    { id: "p2", label: "P2 2-4", sourceIndex: 1, evidence: ganttPassage },
+    { id: "p3", label: "P3 4-6", sourceIndex: 1, evidence: ganttPassage },
+  ],
+  edges: [
+    { from: "p1_first", to: "p2", label: "next", sourceIndex: 1, evidence: ganttPassage },
+    { from: "p2", to: "p3", label: "next", sourceIndex: 1, evidence: ganttPassage },
+  ],
+};
+
+const readyQueuePassage = "At time 4, the ready queue is P3, P1.";
+const readyQueueDiagram: DiagramData = {
+  type: "flowchart",
+  direction: "LR",
+  nodes: [
+    { id: "queue_t4", label: "Ready queue at t=4", sourceIndex: 1, evidence: readyQueuePassage },
+    { id: "p3", label: "P3", sourceIndex: 1, evidence: readyQueuePassage },
+    { id: "p1", label: "P1", sourceIndex: 1, evidence: readyQueuePassage },
+  ],
+  edges: [
+    { from: "queue_t4", to: "p3", label: "front", sourceIndex: 1, evidence: readyQueuePassage },
+    { from: "p3", to: "p1", label: "next", sourceIndex: 1, evidence: readyQueuePassage },
+  ],
+};
+
+test("Gantt diagrams preserve every cited process interval and chronological order", () => {
+  const constraint = getDiagramConstraint("Draw a Gantt chart for the RR example");
+  assert.deepEqual(constraint, { kind: "gantt" });
+  assert.match(getDiagramConstraintInstructions(constraint), /exact process ID and start-end interval/i);
+  assert.deepEqual(
+    validateGroundedDiagram(ganttDiagram, [ganttPassage], constraint),
+    ganttDiagram,
+  );
+});
+
+test("Gantt diagrams reject altered process IDs, intervals, and execution order", () => {
+  const constraint = { kind: "gantt" } as const;
+  const alteredProcess = {
+    ...ganttDiagram,
+    nodes: ganttDiagram.nodes.map((node, index) =>
+      index === 0 ? { ...node, label: "P9 0-2" } : node,
+    ),
+  };
+  const alteredInterval = {
+    ...ganttDiagram,
+    nodes: ganttDiagram.nodes.map((node, index) =>
+      index === 0 ? { ...node, label: "P1 0-3" } : node,
+    ),
+  };
+  const alteredOrder = {
+    ...ganttDiagram,
+    nodes: [
+      ganttDiagram.nodes[1],
+      ganttDiagram.nodes[0],
+      ganttDiagram.nodes[2],
+    ],
+    edges: [
+      { ...ganttDiagram.edges[0], from: "p2", to: "p1_first" },
+      { ...ganttDiagram.edges[1], from: "p1_first", to: "p3" },
+    ],
+  };
+
+  assert.equal(validateGroundedDiagram(alteredProcess, [ganttPassage], constraint), null);
+  assert.equal(validateGroundedDiagram(alteredInterval, [ganttPassage], constraint), null);
+  assert.equal(validateGroundedDiagram(alteredOrder, [ganttPassage], constraint), null);
+});
+
+test("ready-queue diagrams preserve the process order at the requested time", () => {
+  const constraint = getDiagramConstraint("Draw the ready queue at time 4");
+  assert.deepEqual(constraint, { kind: "ready-queue", requestedTime: 4 });
+  assert.deepEqual(getDiagramConstraint("Diagram of ready queue time 4"), {
+    kind: "ready-queue",
+    requestedTime: 4,
+  });
+  assert.match(getDiagramConstraintInstructions(constraint), /exact queue order/i);
+  assert.deepEqual(
+    validateGroundedDiagram(readyQueueDiagram, [readyQueuePassage], constraint),
+    readyQueueDiagram,
+  );
+
+  const reversedQueue = {
+    ...readyQueueDiagram,
+    nodes: [
+      readyQueueDiagram.nodes[0],
+      readyQueueDiagram.nodes[2],
+      readyQueueDiagram.nodes[1],
+    ],
+    edges: [
+      { ...readyQueueDiagram.edges[0], to: "p1" },
+      { ...readyQueueDiagram.edges[1], from: "p1", to: "p3" },
+    ],
+  };
+  assert.equal(
+    validateGroundedDiagram(reversedQueue, [readyQueuePassage], constraint),
+    null,
+  );
 });
 
 test("diagram instructions require source-indexed exact evidence", () => {
@@ -290,6 +426,55 @@ test("unsupported node and relationship content is rejected", () => {
     edges: [{ ...flowchart.edges[0], label: "causes" }],
   };
   assert.equal(validateGroundedDiagram(unquotedClaim, [flowchartPassage]), null);
+});
+
+test("scheduler and dispatcher diagrams reject unsupported steps", () => {
+  const passage =
+    "The short-term scheduler selects a process from the ready queue. The dispatcher gives control of the CPU to the selected process.";
+  const unsupportedStep: DiagramData = {
+    type: "flowchart",
+    direction: "TD",
+    nodes: [
+      { id: "scheduler", label: "short-term scheduler", sourceIndex: 1, evidence: passage },
+      { id: "process", label: "process", sourceIndex: 1, evidence: passage },
+      { id: "dispatcher", label: "dispatcher", sourceIndex: 1, evidence: passage },
+      { id: "cpu", label: "CPU", sourceIndex: 1, evidence: passage },
+      { id: "registers", label: "registers", sourceIndex: 1, evidence: passage },
+    ],
+    edges: [
+      { from: "scheduler", to: "process", label: "selects", sourceIndex: 1, evidence: passage },
+      { from: "dispatcher", to: "cpu", label: "gives control of", sourceIndex: 1, evidence: passage },
+      { from: "dispatcher", to: "registers", label: "saves", sourceIndex: 1, evidence: passage },
+    ],
+  };
+
+  assert.equal(validateGroundedDiagram(unsupportedStep, [passage]), null);
+});
+
+test("invalid or unsupported diagram data is omitted while the answer remains", () => {
+  const invalidGantt = {
+    ...ganttDiagram,
+    nodes: ganttDiagram.nodes.map((node, index) =>
+      index === 0 ? { ...node, label: "P9 0-2" } : node,
+    ),
+  };
+  const parsed = parseTutorResponse(
+    tutorResponse(invalidGantt).replace(
+      "A visual explanation:",
+      "The retrieved passage explains the schedule.",
+    ),
+    {
+      allowDiagram: true,
+      requireDiagram: true,
+      sourcePassages: [ganttPassage],
+      diagramConstraint: { kind: "gantt" },
+    },
+  );
+
+  assert.equal(parsed.diagram, undefined);
+  assert.equal(parsed.diagramData, undefined);
+  assert.match(parsed.reply, /retrieved passage explains the schedule/i);
+  assert.match(parsed.reply, /diagram could not be validated/i);
 });
 
 test("evidence must be an exact quote from the cited retrieved passage", () => {

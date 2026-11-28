@@ -12,9 +12,12 @@ import {
 } from "./embeddings";
 
 const MINIMUM_SEMANTIC_SIMILARITY = 0.35;
-const MINIMUM_UNCORROBORATED_SIMILARITY = 0.78;
 const MAX_CACHED_DOCUMENTS = 2;
+const MAX_CACHED_QUERIES = 32;
 const documentEmbeddingCache = new Map<string, Promise<number[][]>>();
+const queryEmbeddingCache = new Map<string, Promise<number[]>>();
+const embedderCacheIds = new WeakMap<EmbeddingBatch, number>();
+let nextEmbedderCacheId = 0;
 const NON_CONTENT_QUERY_TERMS = new Set([
   "about",
   "after",
@@ -68,6 +71,13 @@ const NON_CONTENT_QUERY_TERMS = new Set([
   "while",
   "with",
   "would",
+  "example",
+  "worked",
+  "time",
+  "length",
+  "duration",
+  "long",
+  "exact",
 ]);
 
 /**
@@ -265,13 +275,23 @@ export async function retrieveSemanticallyRelevantChunks(
     );
   }
 
-  const [queryVector] = await embedder([message], "RETRIEVAL_QUERY");
+  const queryCacheKey = createQueryCacheKey(
+    message,
+    model,
+    options.cacheScope,
+    embedder,
+  );
+  const queryVector = await getCachedQueryEmbedding(
+    queryCacheKey,
+    message,
+    embedder,
+  );
 
   if (!queryVector || queryVector.length === 0) {
     throw new Error("The embedding provider returned no query embedding.");
   }
 
-  const results = chunks
+  const scoredResults = chunks
     .map((chunk, index) => {
       const documentVector = documentVectors[index];
       if (!documentVector) {
@@ -280,49 +300,40 @@ export async function retrieveSemanticallyRelevantChunks(
         );
       }
 
+      const contentTerms = new Set(
+        getContentQueryTerms(getEvidenceText(chunk.text)),
+      );
       return {
         chunk: chunk.text,
-        contentTerms: new Set(
-          getContentQueryTerms(getEvidenceText(chunk.text)),
-        ),
+        contentTerms,
         score: cosineSimilarity(queryVector, documentVector),
+        lexicalMatchCount: queryTerms.filter((term) =>
+          contentTerms.has(term),
+        ).length,
         index: chunk.index,
         start: chunk.start,
         end: chunk.end,
         pageNumbers: getPageNumbers(chunk, options.pageRanges ?? []),
       };
     })
-    .filter((result) => result.score >= MINIMUM_SEMANTIC_SIMILARITY)
     .sort(
       (left, right) => right.score - left.score || left.index - right.index,
     );
+  const rankedResults = scoredResults.filter(
+    (result) =>
+      result.score >= MINIMUM_SEMANTIC_SIMILARITY ||
+      (queryTerms.length > 0 &&
+        result.lexicalMatchCount === queryTerms.length),
+  );
 
   const corroboratedResults = requireLexicalCorroboration
-    ? results.filter(
-        (result) =>
-          [...result.contentTerms].filter((term) => queryTerms.includes(term))
-            .length >= minimumChunkMatches,
+    ? rankedResults.filter(
+        (result) => result.lexicalMatchCount >= minimumChunkMatches,
       )
-    : results;
+    : rankedResults;
 
   if (requireLexicalCorroboration && corroboratedResults.length === 0) {
-    const semanticOnlyMatch = results.find(
-      (result) =>
-        result.score >= MINIMUM_UNCORROBORATED_SIMILARITY &&
-        result.contentTerms.size >= 1,
-    );
-    return semanticOnlyMatch
-      ? [
-          {
-            chunk: semanticOnlyMatch.chunk,
-            score: semanticOnlyMatch.score,
-            index: semanticOnlyMatch.index,
-            start: semanticOnlyMatch.start,
-            end: semanticOnlyMatch.end,
-            pageNumbers: semanticOnlyMatch.pageNumbers,
-          },
-        ]
-      : [];
+    return [];
   }
 
   const completeResults = corroboratedResults.filter(
@@ -354,7 +365,14 @@ export async function retrieveSemanticallyRelevantChunks(
     return [];
   }
 
-  return coverageSelected.map((result) => ({
+  const selectedResults = includeRelatedExampleChunks(
+    coverageSelected,
+    scoredResults,
+    message,
+    options.maxResults ?? 3,
+  );
+
+  return selectedResults.map((result) => ({
     chunk: result.chunk,
     score: result.score,
     index: result.index,
@@ -365,17 +383,165 @@ export async function retrieveSemanticallyRelevantChunks(
 }
 
 export function getContentQueryTerms(text: string): string[] {
+  const normalizedText = normalizeSchedulingTerms(text);
   return [
     ...new Set(
-      text
+      normalizedText
         .toLowerCase()
-        .match(/[a-z0-9]+/g)
+        .match(/p\d+|\d+(?:\.\d+)?|[a-z]+/g)
         ?.map(normalizeContentTerm)
         ?.filter(
-          (term) => term.length > 3 && !NON_CONTENT_QUERY_TERMS.has(term),
+          (term) =>
+            (term.length > 3 ||
+              /^p\d+$/.test(term) ||
+              /^\d+(?:\.\d+)?$/.test(term) ||
+              term === "sjf") &&
+            !NON_CONTENT_QUERY_TERMS.has(term),
         ) ?? [],
     ),
   ];
+}
+
+function normalizeSchedulingTerms(text: string): string {
+  return text
+    .replace(
+      /\btime[\s-]+(?:quantum|slice)(?:\s+(?:length|duration))?\b/gi,
+      " quantum ",
+    )
+    .replace(/\bquantum\s+(?:length|duration)\b/gi, " quantum ")
+    .replace(/\b(?:arrival|arriving|arrive)\s+times?\b/gi, " arrival ")
+    .replace(/\b(?:arrival|arriving|arrive)\b/gi, " arrival ")
+    .replace(/\bburst\s+times?\b/gi, " burst ")
+    .replace(/\bcpu\s+burst\b/gi, " burst ")
+    .replace(/\bburst\b/gi, " burst ")
+    .replace(
+      /\b(?:round[\s-]*robin|cyclic(?:al)?\s+(?:schedul(?:ing|er)|rotation)|rotating\s+(?:queue|scheduler)|rotate\s+through\s+the\s+queue|(?:cyclic|rotating)\s+schedule)\b/gi,
+      " roundrobin ",
+    )
+    .replace(/\bRR\b/gi, " roundrobin ")
+    .replace(/\bAT\b/g, " arrival ")
+    .replace(/\bBT\b/g, " burst ")
+    .replace(/\bTQ\b/g, " quantum ")
+    .replace(/\b(?:shortest\s+job\s+first|SJF)\b/gi, " sjf ")
+    .replace(
+      /\b(?:gantt(?:\s+chart)?|(?:execution|run|schedule)\s+(?:order|sequence)|order\s+of\s+execution|process\s+sequence|timeline)\b/gi,
+      " scheduleorder ",
+    )
+    .replace(
+      /\b(?:starvation|starv(?:e|es|ed|ing)|indefinite\s+wait(?:s|ing)?|wait(?:s|ing)?\s+indefinitely|wait(?:s|ing)?\s+forever|never\s+gets?\s+(?:the\s+)?cpu)\b/gi,
+      " starvation ",
+    )
+    .replace(/\b(?:context[\s-]+switch(?:ing)?|switching\s+overhead|dispatch\s+overhead)\b/gi, " contextswitch ");
+}
+
+function includeRelatedExampleChunks<
+  T extends RetrievalResult & { contentTerms: Set<string> },
+>(
+  selected: T[],
+  candidates: T[],
+  message: string,
+  maxResults: number,
+): T[] {
+  if (
+    selected.length === 0 ||
+    !/\b(?:example|worked|gantt|execution|timeline|quantum|arrival|burst|p\d+)\b/i.test(
+      message,
+    )
+  ) {
+    return selected;
+  }
+
+  const expanded = [...selected];
+  const selectedKeys = new Set(selected.map((result) => result.index));
+
+  for (
+    let cursor = 0;
+    cursor < expanded.length && expanded.length < maxResults;
+    cursor++
+  ) {
+    const anchor = expanded[cursor];
+    if (!isSchedulingExamplePassage(anchor.chunk)) continue;
+
+    const neighbors = candidates
+      .filter(
+        (candidate) =>
+          !selectedKeys.has(candidate.index) &&
+          Math.abs(candidate.index - anchor.index) === 1 &&
+          isSchedulingExamplePassage(candidate.chunk) &&
+          areFromSameExample(anchor.chunk, candidate.chunk) &&
+          (candidate.score >= MINIMUM_SEMANTIC_SIMILARITY ||
+            sharesProcessIdentifier(anchor.chunk, candidate.chunk)),
+      )
+      .sort(
+        (left, right) =>
+          Math.abs(left.index - anchor.index) -
+            Math.abs(right.index - anchor.index) ||
+          right.score - left.score,
+      );
+
+    for (const neighbor of neighbors) {
+      if (expanded.length >= maxResults) break;
+      selectedKeys.add(neighbor.index);
+      expanded.push(neighbor);
+    }
+  }
+
+  return expanded.sort((left, right) => left.index - right.index);
+}
+
+function isSchedulingExamplePassage(text: string): boolean {
+  return /\b(?:p\d+|at\s*[=:]|bt\s*[=:]|tq\s*[=:]|time\s+quantum|time\s+slice|gantt|round[\s-]*robin|sjf|starvation|context[\s-]+switch(?:ing)?)\b/i.test(
+    text,
+  );
+}
+
+function areFromSameExample(left: string, right: string): boolean {
+  const leftExample = getExampleLabel(left);
+  const rightExample = getExampleLabel(right);
+  if (leftExample && rightExample && leftExample !== rightExample) {
+    return false;
+  }
+
+  const leftAlgorithm = getSchedulingAlgorithm(left);
+  const rightAlgorithm = getSchedulingAlgorithm(right);
+  if (leftAlgorithm && rightAlgorithm) {
+    return leftAlgorithm === rightAlgorithm;
+  }
+
+  const rightProcessIds = new Set(getProcessIds(right));
+  if (getProcessIds(left).some((processId) => rightProcessIds.has(processId))) {
+    return true;
+  }
+
+  return Boolean(leftExample && leftExample === rightExample);
+}
+
+function getExampleLabel(text: string): string | undefined {
+  const label = text.match(
+    /\b(main|additional|first|second|another)\s+(?:round[\s-]*robin\s+)?example\b/i,
+  )?.[1];
+  if (label) return label.toLowerCase();
+
+  const numberedLabel = text.match(/\bexample\s*(\d+)\b/i)?.[1];
+  return numberedLabel ? `example-${numberedLabel}` : undefined;
+}
+
+function getSchedulingAlgorithm(text: string): string | undefined {
+  if (/\b(?:round[\s-]*robin|RR)\b/i.test(text)) return "round-robin";
+  if (/\b(?:shortest\s+job\s+first|SJF)\b/i.test(text)) return "sjf";
+  if (/\b(?:first[\s-]+come[\s-]+first[\s-]+served|FCFS)\b/i.test(text)) {
+    return "fcfs";
+  }
+  return undefined;
+}
+
+function getProcessIds(text: string): string[] {
+  return [...new Set(text.match(/\bp\d+\b/gi)?.map((id) => id.toUpperCase()) ?? [])];
+}
+
+function sharesProcessIdentifier(left: string, right: string): boolean {
+  const rightProcessIds = new Set(getProcessIds(right));
+  return getProcessIds(left).some((processId) => rightProcessIds.has(processId));
 }
 
 function getEvidenceText(text: string): string {
@@ -566,4 +732,64 @@ function createDocumentCacheKey(texts: string[], model: string, scope?: string):
     .update("\0")
     .update(JSON.stringify(texts))
     .digest("hex");
+}
+
+function createQueryCacheKey(
+  message: string,
+  model: string,
+  scope: string | undefined,
+  embedder: EmbeddingBatch,
+): string {
+  let embedderId = embedderCacheIds.get(embedder);
+  if (embedderId === undefined) {
+    embedderId = nextEmbedderCacheId++;
+    embedderCacheIds.set(embedder, embedderId);
+  }
+
+  return createDocumentCacheKey(
+    [message],
+    model,
+    `${scope ?? "shared"}:query:${embedderId}`,
+  );
+}
+
+async function getCachedQueryEmbedding(
+  cacheKey: string,
+  message: string,
+  embedder: EmbeddingBatch,
+): Promise<number[]> {
+  let cached = queryEmbeddingCache.get(cacheKey);
+  if (cached) {
+    queryEmbeddingCache.delete(cacheKey);
+    queryEmbeddingCache.set(cacheKey, cached);
+    return cached;
+  }
+
+  cached = embedder([message], "RETRIEVAL_QUERY").then((vectors) => {
+    const [vector] = vectors;
+    if (
+      vectors.length !== 1 ||
+      !vector ||
+      vector.length === 0 ||
+      vector.some((value) => !Number.isFinite(value))
+    ) {
+      throw new Error("The embedding provider returned an invalid query embedding.");
+    }
+    return vector;
+  });
+  queryEmbeddingCache.set(cacheKey, cached);
+
+  while (queryEmbeddingCache.size > MAX_CACHED_QUERIES) {
+    const oldestKey = queryEmbeddingCache.keys().next().value;
+    if (oldestKey) queryEmbeddingCache.delete(oldestKey);
+  }
+
+  try {
+    return await cached;
+  } catch (error) {
+    if (queryEmbeddingCache.get(cacheKey) === cached) {
+      queryEmbeddingCache.delete(cacheKey);
+    }
+    throw error;
+  }
 }

@@ -25,6 +25,17 @@ export function AuthForm({ mode }: { mode: Mode }) {
       ? "We’ll send you a link to reset your password."
       : "Pick up where your curiosity left off.";
 
+  function getNextPath(): string {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) {
+      return "/";
+    }
+
+    const destination = new URL(next, window.location.origin);
+    if (destination.origin !== window.location.origin) return "/";
+    return `${destination.pathname}${destination.search}${destination.hash}`;
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -47,16 +58,19 @@ export function AuthForm({ mode }: { mode: Mode }) {
           password,
           options: {
             data: { full_name: name.trim() },
-            emailRedirectTo: `${origin}/auth/callback?next=/`,
+            emailRedirectTo: `${origin}/auth/callback?${new URLSearchParams({ next: getNextPath() })}`,
           },
         });
         if (authError) throw authError;
-        if (data.session) router.replace("/");
+        if (data.session) {
+          router.replace(getNextPath());
+          router.refresh();
+        }
         else setMessage("Check your inbox to confirm your email, then come back to sign in.");
       } else {
         const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
         if (authError) throw authError;
-        router.replace("/");
+        router.replace(getNextPath());
         router.refresh();
       }
     } catch (cause) {
@@ -73,7 +87,9 @@ export function AuthForm({ mode }: { mode: Mode }) {
       const supabase = createClient();
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: `${window.location.origin}/auth/callback?next=/` },
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?${new URLSearchParams({ next: getNextPath() })}`,
+        },
       });
       if (authError) throw authError;
     } catch (cause) {
@@ -85,7 +101,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   return (
     <main className="min-h-screen w-full bg-background text-text-primary flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-[440px]">
-        <Link href="/login" className="inline-flex items-center gap-3 mb-9 group">
+        <Link href="/" className="inline-flex items-center gap-3 mb-9 group">
           <span className="h-10 w-10 rounded-xl bg-accent-primary text-white grid place-items-center font-bold text-lg shadow-sm">S</span>
           <span>
             <span className="block text-base font-semibold tracking-tight">SocraticAI</span>

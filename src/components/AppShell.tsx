@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sidebar, NAV_ITEMS, renderNavIcon } from "@/components/Sidebar";
+import { AuthActions, Sidebar, NAV_ITEMS, renderNavIcon } from "@/components/Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -13,7 +13,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   if (["/login", "/signup", "/forgot-password", "/reset-password"].includes(pathname)) {
-    return <>{children}</>;
+    return (
+      <>
+        <div className="fixed right-4 top-4 z-30 flex items-center gap-2">
+          <AuthActions authenticatedOnly />
+          <ThemeToggle />
+        </div>
+        {children}
+      </>
+    );
   }
 
   return (
@@ -142,12 +150,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-border mt-auto flex items-center justify-between shrink-0">
-          <div className="flex flex-col">
-            <span className="text-xs font-medium text-text-primary">Theme</span>
-            <span className="text-[11px] text-text-muted">Appearance mode</span>
+        <div className="p-4 border-t border-border mt-auto space-y-3 shrink-0">
+          <AuthActions onNavigate={closeSidebar} />
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs font-medium text-text-primary">Theme</span>
+              <span className="text-[11px] text-text-muted">Appearance mode</span>
+            </div>
+            <ThemeToggle />
           </div>
-          <ThemeToggle />
         </div>
       </aside>
     </div>

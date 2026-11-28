@@ -141,6 +141,16 @@ test("strict grounding allows transparent conclusions from combined retrieved fa
   );
 });
 
+test("worked-example instructions preserve exact inputs and reject invented defaults", () => {
+  const instructions = getTutorInstructions("direct");
+
+  assert.match(instructions, /preserve its process identifiers, numerical inputs/i);
+  assert.match(instructions, /time quantum, execution intervals, and ordering exactly/i);
+  assert.match(instructions, /never replace a missing arrival time, burst time/i);
+  assert.match(instructions, /do not claim a document-grounded result/i);
+  assert.match(instructions, /only when the student explicitly asks for a new or general example/i);
+});
+
 test("mild confusion adapts Socratic guidance with simpler wording and a small hint", () => {
   const instructions = getTutorInstructions("socratic", "mild");
 

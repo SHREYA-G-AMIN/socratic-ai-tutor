@@ -112,18 +112,77 @@ test("reports a missing API key without making a provider request", async () => 
 
 test("surfaces provider failures without leaking response details", async () => {
   await withApiKey("sensitive-test-key", async () => {
+    let attempts = 0;
     await assert.rejects(
       generateEmbeddings(
         ["text"],
         "RETRIEVAL_QUERY",
-        async () => new Response("sensitive provider response", { status: 429 }),
+        async () => {
+          attempts++;
+          return Response.json(
+            {
+              error: {
+                code: 429,
+                status: "RESOURCE_EXHAUSTED",
+                message: "sensitive provider response",
+              },
+            },
+            { status: 429 },
+          );
+        },
       ),
       (error: unknown) =>
         error instanceof EmbeddingProviderError &&
         error.code === "PROVIDER_UNAVAILABLE" &&
+        error.httpStatus === 429 &&
+        error.providerStatus === "RESOURCE_EXHAUSTED" &&
         !error.message.includes("sensitive") &&
         !error.message.includes("sensitive-test-key"),
     );
+    assert.equal(attempts, 2);
+  });
+});
+
+test("retries a transient provider failure once and returns the successful vectors", async () => {
+  await withApiKey("test-key", async () => {
+    let attempts = 0;
+    const embeddings = await generateEmbeddings(
+      ["text"],
+      "RETRIEVAL_QUERY",
+      async () => {
+        attempts++;
+        if (attempts === 1) {
+          return new Response(null, {
+            status: 503,
+            headers: { "retry-after": "0" },
+          });
+        }
+        return Response.json({ embeddings: [{ values: [0.2, 0.8] }] });
+      },
+    );
+
+    assert.deepEqual(embeddings, [[0.2, 0.8]]);
+    assert.equal(attempts, 2);
+  });
+});
+
+test("does not retry non-transient provider errors", async () => {
+  await withApiKey("test-key", async () => {
+    let attempts = 0;
+    await assert.rejects(
+      generateEmbeddings(["text"], "RETRIEVAL_QUERY", async () => {
+        attempts++;
+        return Response.json(
+          { error: { code: 400, status: "INVALID_ARGUMENT" } },
+          { status: 400 },
+        );
+      }),
+      (error: unknown) =>
+        error instanceof EmbeddingProviderError &&
+        error.httpStatus === 400 &&
+        error.providerStatus === "INVALID_ARGUMENT",
+    );
+    assert.equal(attempts, 1);
   });
 });
 
@@ -140,5 +199,25 @@ test("rejects malformed or non-finite provider embeddings", async () => {
         error instanceof EmbeddingProviderError &&
         error.code === "INVALID_RESPONSE",
     );
+  });
+});
+
+test("rejects malformed response shapes and inconsistent vector dimensions", async () => {
+  await withApiKey("test-key", async () => {
+    for (const result of [
+      { embeddings: [{ values: "not-an-array" }] },
+      { embeddings: [{ values: [1, 0] }, { values: [1] }] },
+    ]) {
+      await assert.rejects(
+        generateEmbeddings(
+          ["first", "second"],
+          "RETRIEVAL_DOCUMENT",
+          async () => Response.json(result),
+        ),
+        (error: unknown) =>
+          error instanceof EmbeddingProviderError &&
+          error.code === "INVALID_RESPONSE",
+      );
+    }
   });
 });

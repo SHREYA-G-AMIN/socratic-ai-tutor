@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 type Theme = "light" | "dark";
 
@@ -17,6 +23,11 @@ const STORAGE_KEY = "socratic-theme";
 function getInitialTheme(): Theme {
   if (typeof window === "undefined") return "light";
 
+  const initializedTheme = document.documentElement.getAttribute("data-theme");
+  if (initializedTheme === "light" || initializedTheme === "dark") {
+    return initializedTheme;
+  }
+
   try {
     const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
     if (stored === "light" || stored === "dark") return stored;
@@ -29,24 +40,26 @@ function getInitialTheme(): Theme {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
+  const [initialized, setInitialized] = useState(false);
 
-  useEffect(() => {
-    // Reading localStorage/matchMedia is only possible after mount; this
-    // corrects the server-rendered initial "light" state to the user's
-    // stored preference without causing a hydration mismatch.
+  useLayoutEffect(() => {
+    const initialTheme = getInitialTheme();
+    document.documentElement.setAttribute("data-theme", initialTheme);
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setThemeState(getInitialTheme());
+    setThemeState(initialTheme);
+    setInitialized(true);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!initialized) return;
     document.documentElement.setAttribute("data-theme", theme);
 
     try {
       localStorage.setItem(STORAGE_KEY, theme);
     } catch {
-      // localStorage unavailable
+      // Theme still applies for this session when storage is unavailable.
     }
-  }, [theme]);
+  }, [initialized, theme]);
 
   function setTheme(newTheme: Theme) {
     setThemeState(newTheme);

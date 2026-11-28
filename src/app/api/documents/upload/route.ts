@@ -56,7 +56,12 @@ export async function POST(request: Request): Promise<Response> {
       .single();
 
     if (saveError || !savedDocument) {
-      console.error("[api/documents/upload] metadata persistence failed", saveError?.message);
+      console.error("[api/documents/upload] metadata persistence failed", {
+        code: saveError?.code,
+        message: saveError?.message,
+        details: saveError?.details,
+        hint: saveError?.hint,
+      });
       return Response.json(
         toErrorBody(new DocumentProcessingError("EXTRACTION_FAILED", "The PDF was processed but could not be saved to your account. Please try again.")),
         { status: 500 },
