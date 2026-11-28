@@ -192,11 +192,8 @@ export async function POST(request: Request) {
             {
               maxResults: MAX_RETRIEVED_CHUNKS,
               pageRanges,
-<<<<<<< HEAD
-=======
               cacheScope,
               requireLexicalCorroboration: false,
->>>>>>> 2251fea73e684a7e7b8140ed63c196cbea5d2846
             },
           );
         } catch {
