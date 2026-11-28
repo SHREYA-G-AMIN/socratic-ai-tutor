@@ -466,7 +466,7 @@ function hasOrderedRelationship(
   toLabel: string,
   evidence: string,
 ): boolean {
-  const tokens = evidence.toLocaleLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const tokens: string[] = evidence.toLocaleLowerCase().match(/[a-z0-9]+/g) ?? [];
   const findLabelEnd = (label: string, startAt: number): number | null => {
     const terms = label
       .toLocaleLowerCase()
