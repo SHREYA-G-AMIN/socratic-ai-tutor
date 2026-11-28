@@ -1,9 +1,12 @@
-
 # Socratic AI Tutor
 
 **An AI-powered adaptive learning platform that transforms personal study materials into an interactive, personalized learning experience.**
 
 Socratic AI Tutor helps students understand concepts through document-grounded AI conversations, Socratic guidance, adaptive explanations, semantic search, and visual learning. Students can upload their study materials, ask questions, explore cited sources, and track their learning activity in one place.
+
+## Live Demo
+
+[**Try Socratic AI Tutor**](https://socratic-ai-tutor-alpha.vercel.app/)
 
 ## Key Features
 
