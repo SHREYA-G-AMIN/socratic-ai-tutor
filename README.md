@@ -193,11 +193,7 @@ npm run build
 ```text
 socratic-ai-tutor/
 ├── docs/
-│   ├── architecture.md
-│   ├── design.md
-│   ├── prd.md
-│   ├── rules.md
-│   └── task.md
+│   └── user-requirements.md
 ├── public/
 ├── src/
 │   ├── app/
