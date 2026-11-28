@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DocumentPreview } from "@/components/DocumentPreview";
@@ -28,6 +29,12 @@ interface ChatRequest {
   history: Message[];
 }
 
+interface SourceExplorerState {
+  messageIndex: number;
+  sources: ChatSourceReference[];
+  activeIndex: number;
+}
+
 const INITIAL_MESSAGES: Message[] = [
   {
     role: "tutor",
@@ -46,7 +53,8 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [mobileTab, setMobileTab] = useState<"document" | "chat">("document");
   const [retryHint, setRetryHint] = useState(false);
-  const [sourceToReveal, setSourceToReveal] = useState<ChatSourceReference | null>(null);
+  const [sourceExplorer, setSourceExplorer] =
+    useState<SourceExplorerState | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const documentSessionRef = useRef(0);
   const learningProgress = useMemo(
@@ -129,7 +137,7 @@ export default function Home() {
     setInputValue("");
     setChatError(null);
     setRetryHint(false);
-    setSourceToReveal(null);
+    setSourceExplorer(null);
     setIsLoading(false);
   };
 
@@ -141,7 +149,7 @@ export default function Home() {
     setInputValue("");
     setChatError(null);
     setRetryHint(false);
-    setSourceToReveal(null);
+    setSourceExplorer(null);
     setIsLoading(false);
   };
 
@@ -346,7 +354,14 @@ export default function Home() {
             <DocumentPreview
               document={uploadedDocument}
               onReset={handleDocumentReset}
-              sourceToReveal={sourceToReveal}
+              sourceReferences={sourceExplorer?.sources ?? null}
+              selectedSourceIndex={sourceExplorer?.activeIndex ?? 0}
+              onSourceIndexChange={(activeIndex) =>
+                setSourceExplorer((current) =>
+                  current ? { ...current, activeIndex } : current,
+                )
+              }
+              onCloseSourceExplorer={() => setSourceExplorer(null)}
             />
           ) : (
             <div className="flex flex-col h-full min-h-0 overflow-hidden">
@@ -364,21 +379,96 @@ export default function Home() {
                   </div>
                   <div>
                     <h2 className="text-sm font-semibold text-text-primary">
-                      Document Workspace
+                      Your learning workspace
                     </h2>
                     <p className="text-xs text-text-muted">
-                      Upload course material to begin
+                      Grounded in the material you choose
                     </p>
                   </div>
                 </div>
 
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-surface-elevated border border-border-subtle text-text-muted">
-                  PDF format
+                  PDF study space
                 </span>
               </header>
 
-              <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6">
-                <PdfUploader onUploaded={handleDocumentUploaded} />
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  <section
+                    aria-labelledby="welcome-heading"
+                    className="relative overflow-hidden border-b border-border bg-gradient-to-br from-accent-primary-soft/50 via-surface to-accent-secondary-soft/40 px-5 py-6 sm:px-7 sm:py-8"
+                  >
+                    <div className="pointer-events-none absolute -right-10 -top-14 h-48 w-48 rounded-full border-[24px] border-accent-primary/5" aria-hidden="true" />
+                    <div className="relative">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-primary">
+                        Learn with your own material
+                      </p>
+                      <h1
+                        id="welcome-heading"
+                        className="mt-2 max-w-xl text-2xl font-semibold leading-tight tracking-tight text-text-primary sm:text-3xl"
+                      >
+                        Understand your course, one question at a time.
+                      </h1>
+                      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-secondary">
+                        Upload a chapter or lecture notes. Your Socratic tutor uses
+                        that material to guide your thinking with questions,
+                        explanations, and hints.
+                      </p>
+
+                      <ol className="mt-6 grid gap-2 sm:grid-cols-3">
+                        {[
+                          {
+                            number: "01",
+                            title: "Upload material",
+                            description: "Choose a course PDF to study.",
+                          },
+                          {
+                            number: "02",
+                            title: "Ask questions",
+                            description: "Explore ideas from your notes.",
+                          },
+                          {
+                            number: "03",
+                            title: "Learn step by step",
+                            description: "Build understanding with guided help.",
+                          },
+                        ].map((step) => (
+                          <li
+                            key={step.number}
+                            className="rounded-xl border border-border/80 bg-surface/75 p-3.5"
+                          >
+                            <span className="text-[10px] font-bold tracking-wider text-accent-primary">
+                              {step.number}
+                            </span>
+                            <h2 className="mt-1 text-sm font-semibold text-text-primary">
+                              {step.title}
+                            </h2>
+                            <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                              {step.description}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+
+                      <div className="mt-5 flex flex-wrap items-center gap-3">
+                        <Link
+                          href="#upload-course-material"
+                          className="inline-flex min-h-11 items-center justify-center rounded-xl bg-accent-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-accent-primary-hover"
+                        >
+                          Upload a PDF
+                        </Link>
+                        <Link
+                          href="/my-documents"
+                          className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-surface/80 px-4 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-hover"
+                        >
+                          Browse saved documents
+                        </Link>
+                      </div>
+                    </div>
+                  </section>
+
+                  <div id="upload-course-material" className="p-5 sm:p-7">
+                    <PdfUploader onUploaded={handleDocumentUploaded} />
+                  </div>
               </div>
             </div>
           )}
@@ -487,31 +577,77 @@ export default function Home() {
                     </p>
                   )}
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-3 border-t border-border pt-2">
-                      <p className="text-[11px] font-semibold text-text-muted">
-                        Sources
-                      </p>
-                      <ul className="mt-1 space-y-1">
-                        {msg.sources.map((source) => (
-                          <li key={`${source.chunkIndex}-${source.startChar}`}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSourceToReveal({ ...source });
-                                setMobileTab("document");
-                              }}
-                              className="text-left text-[11px] text-accent-secondary underline decoration-dotted underline-offset-2 hover:text-accent-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
-                              aria-label={`Open source passage from ${source.fileName ?? "uploaded document"}${source.pageNumbers.length > 0 ? `, page ${source.pageNumbers.join(", ")}` : ""}`}
+                    <div className="mt-4 border-t border-border pt-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <h3 className="text-xs font-semibold text-text-primary">
+                          Sources used
+                        </h3>
+                        <p className="text-[10px] text-text-muted">
+                          Select a passage to inspect it in the document
+                        </p>
+                      </div>
+                      <ol className="mt-2 grid gap-2">
+                        {msg.sources.map((source, sourceIndex) => {
+                          const isActive =
+                            sourceExplorer?.messageIndex === idx &&
+                            sourceExplorer.activeIndex === sourceIndex;
+                          const location = getCitationLocation(source);
+
+                          return (
+                            <li
+                              key={`${source.chunkIndex}-${source.startChar}`}
                             >
-                              {source.fileName ?? "Uploaded document"}
-                              {source.pageNumbers.length > 0
-                                ? ` · page${source.pageNumbers.length > 1 ? "s" : ""} ${source.pageNumbers.join(", ")}`
-                                : ` · text ${source.startChar}–${source.endChar}`}
-                              <span className="ml-1 text-text-muted">· Open passage</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSourceExplorer({
+                                    messageIndex: idx,
+                                    sources: msg.sources ?? [],
+                                    activeIndex: sourceIndex,
+                                  });
+                                  setMobileTab("document");
+                                }}
+                                aria-pressed={isActive}
+                                aria-label={`Inspect source ${sourceIndex + 1} from ${source.fileName ?? "uploaded document"}, ${location}`}
+                                className={`flex min-h-14 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary ${
+                                  isActive
+                                    ? "border-accent-primary bg-accent-primary-soft/40"
+                                    : "border-border bg-surface/70 hover:border-accent-primary/40 hover:bg-surface"
+                                }`}
+                              >
+                                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-accent-primary/20 bg-accent-primary-soft text-xs font-bold text-accent-primary">
+                                  {String(sourceIndex + 1).padStart(2, "0")}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-xs font-semibold text-text-primary">
+                                    {source.fileName ?? "Uploaded document"}
+                                  </span>
+                                  <span className="mt-0.5 block text-[11px] text-text-secondary">
+                                    {location}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 text-[11px] font-semibold text-accent-primary">
+                                  Inspect
+                                </span>
+                                <svg
+                                  className="h-4 w-4 shrink-0 text-accent-primary"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={1.8}
+                                    d="M5 12h14m-6-6 6 6-6 6"
+                                  />
+                                </svg>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ol>
                     </div>
                   )}
                 </div>
@@ -624,4 +760,13 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+function getCitationLocation(source: ChatSourceReference): string {
+  if (source.pageNumbers.length > 0) {
+    const label = source.pageNumbers.length === 1 ? "PDF page" : "PDF pages";
+    return `${label} ${source.pageNumbers.join(", ")}`;
+  }
+
+  return `Text ${source.startChar}–${source.endChar}`;
 }

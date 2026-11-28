@@ -164,7 +164,7 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
         </h3>
         <p className="text-xs sm:text-sm text-text-secondary leading-relaxed">
           Upload your syllabus, textbook chapter, or lecture notes in PDF format.
-          Your tutor will reference this content to guide your thinking.
+          Your tutor will use this material to guide questions, explanations, and hints.
         </p>
       </div>
 
@@ -264,32 +264,6 @@ export function PdfUploader({ onUploaded }: PdfUploaderProps) {
         </div>
       )}
 
-      {/* Guided Workspace Tips */}
-      <div className="pt-2">
-        <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-3">
-          How Socratic Tutoring Works
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3 rounded-lg border border-border bg-surface-elevated/20 space-y-1">
-            <div className="text-accent-primary text-xs font-semibold">1. Grounding</div>
-            <p className="text-[11px] text-text-secondary leading-normal">
-              Extracts concepts directly from your uploaded material.
-            </p>
-          </div>
-          <div className="p-3 rounded-lg border border-border bg-surface-elevated/20 space-y-1">
-            <div className="text-accent-secondary text-xs font-semibold">2. Inquiry</div>
-            <p className="text-[11px] text-text-secondary leading-normal">
-              Asks guided questions instead of giving away direct answers.
-            </p>
-          </div>
-          <div className="p-3 rounded-lg border border-border bg-surface-elevated/20 space-y-1">
-            <div className="text-info text-xs font-semibold">3. Recall</div>
-            <p className="text-[11px] text-text-secondary leading-normal">
-              Reinforces your understanding with step-by-step hints.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

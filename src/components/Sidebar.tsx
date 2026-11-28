@@ -17,7 +17,7 @@ export interface NavItemConfig {
 export const NAV_ITEMS: NavItemConfig[] = [
   { id: "home", href: "/", label: "Home", icon: "home" },
   { id: "documents", href: "/my-documents", label: "My Documents", icon: "documents" },
-  { id: "path", href: "/learning-path", label: "Learning Path", icon: "path" },
+  { id: "path", href: "/learning-path", label: "Learning Dashboard", icon: "path" },
   { id: "history", href: "/chat-history", label: "Chat History", icon: "history" },
 ];
 

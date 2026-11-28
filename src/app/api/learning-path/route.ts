@@ -8,7 +8,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("conversations")
-    .select("id,title,updated_at,messages")
+    .select("id,title,document_id,updated_at,messages")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
 
@@ -20,6 +20,7 @@ export async function GET() {
   const conversations = (data ?? []).map((conversation) => ({
     id: conversation.id,
     title: conversation.title,
+    document_id: conversation.document_id,
     updated_at: conversation.updated_at,
     messages: Array.isArray(conversation.messages) ? conversation.messages : [],
   }));

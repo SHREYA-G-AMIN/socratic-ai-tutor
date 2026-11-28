@@ -2,22 +2,32 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { DocumentUploadSuccessData } from "@/types/document";
+import type { ChatSourceReference } from "@/types/chat";
 
 export interface DocumentPreviewProps {
   document: DocumentUploadSuccessData;
   onReset?: () => void;
-  sourceToReveal?: { startChar: number; endChar: number } | null;
+  sourceReferences?: ChatSourceReference[] | null;
+  selectedSourceIndex?: number;
+  onSourceIndexChange?: (index: number) => void;
+  onCloseSourceExplorer?: () => void;
 }
 
-export function DocumentPreview({ document, onReset, sourceToReveal }: DocumentPreviewProps) {
+export function DocumentPreview({
+  document,
+  onReset,
+  sourceReferences,
+  selectedSourceIndex = 0,
+  onSourceIndexChange,
+  onCloseSourceExplorer,
+}: DocumentPreviewProps) {
   const [copied, setCopied] = useState(false);
-  const [highlightedSource, setHighlightedSource] = useState<{ startChar: number; endChar: number } | null>(null);
   const textContainerRef = useRef<HTMLDivElement>(null);
   const sourceMarkerRef = useRef<HTMLElement>(null);
+  const selectedSource = sourceReferences?.[selectedSourceIndex] ?? null;
 
   useEffect(() => {
-    if (!sourceToReveal) return;
-    setHighlightedSource(sourceToReveal);
+    if (!selectedSource) return;
 
     const frame = window.requestAnimationFrame(() => {
       const container = textContainerRef.current;
@@ -35,16 +45,16 @@ export function DocumentPreview({ document, onReset, sourceToReveal }: DocumentP
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [sourceToReveal]);
+  }, [selectedSource]);
 
-  const highlightStart = highlightedSource
-    ? Math.max(0, Math.min(document.text.length, highlightedSource.startChar))
+  const highlightStart = selectedSource
+    ? Math.max(0, Math.min(document.text.length, selectedSource.startChar))
     : 0;
-  const highlightEnd = highlightedSource
-    ? Math.max(highlightStart, Math.min(document.text.length, highlightedSource.endChar))
+  const highlightEnd = selectedSource
+    ? Math.max(highlightStart, Math.min(document.text.length, selectedSource.endChar))
     : 0;
   const hasHighlightedSource = Boolean(
-    highlightedSource && highlightEnd > highlightStart,
+    selectedSource && highlightEnd > highlightStart,
   );
 
   const handleCopy = async () => {
@@ -118,6 +128,72 @@ export function DocumentPreview({ document, onReset, sourceToReveal }: DocumentP
           </div>
         </div>
 
+        {selectedSource && sourceReferences && (
+          <section
+            aria-label="Source Explorer"
+            className="shrink-0 rounded-xl border border-accent-primary/25 bg-accent-primary-soft/25 p-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-primary">
+                  Source Explorer
+                </p>
+                <p
+                  aria-live="polite"
+                  className="mt-1 text-xs font-medium text-text-secondary"
+                >
+                  Source {selectedSourceIndex + 1} of {sourceReferences.length}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSourceIndexChange?.(selectedSourceIndex - 1)
+                  }
+                  disabled={selectedSourceIndex <= 0}
+                  aria-label="Previous source"
+                  className="min-h-9 rounded-lg border border-border bg-surface px-2.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSourceIndexChange?.(selectedSourceIndex + 1)
+                  }
+                  disabled={selectedSourceIndex >= sourceReferences.length - 1}
+                  aria-label="Next source"
+                  className="min-h-9 rounded-lg border border-border bg-surface px-2.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  Next
+                </button>
+                <button
+                  type="button"
+                  onClick={onCloseSourceExplorer}
+                  aria-label="Close source explorer"
+                  className="min-h-9 rounded-lg px-2 text-xs font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="max-w-full truncate rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-text-primary">
+                {selectedSource.fileName ?? document.fileName}
+              </span>
+              <span className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-secondary">
+                {formatSourceLocation(selectedSource)}
+              </span>
+            </div>
+
+            <blockquote className="mt-3 max-h-28 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-surface/75 p-3 text-xs leading-relaxed text-text-secondary">
+              {selectedSource.text}
+            </blockquote>
+          </section>
+        )}
+
         {/* Extracted text container with its own scroll area */}
         <div className="flex-1 flex flex-col min-h-0 rounded-xl border border-border bg-surface-elevated/30 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-surface shrink-0">
@@ -169,4 +245,13 @@ export function DocumentPreview({ document, onReset, sourceToReveal }: DocumentP
       </div>
     </div>
   );
+}
+
+function formatSourceLocation(source: ChatSourceReference): string {
+  if (source.pageNumbers.length > 0) {
+    const label = source.pageNumbers.length === 1 ? "PDF page" : "PDF pages";
+    return `${label} ${source.pageNumbers.join(", ")}`;
+  }
+
+  return `Text ${source.startChar}–${source.endChar}`;
 }

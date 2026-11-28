@@ -487,7 +487,7 @@ interface ReadyQueueSnapshot {
 
 function parseGanttSliceLabel(value: string): GanttSlice | null {
   const match = value.match(
-    /^\s*(P\d+)\s*[\[(]?\s*(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)\s*[\])]?\s*$/i,
+    /^\s*(P\d+)\s*[\[(:]?\s*(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)\s*[\])]?\s*$/i,
   );
   if (!match) {
     return null;

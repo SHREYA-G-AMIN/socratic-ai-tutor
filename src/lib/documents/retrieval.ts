@@ -167,7 +167,7 @@ export function retrieveRelevantChunks(
   const candidates = chunks
     .map((chunk) => {
       const evidenceText = getEvidenceText(chunk.text);
-      const contentTerms = new Set(getContentQueryTerms(evidenceText));
+      const contentTerms = new Set(getEvidenceContentTerms(evidenceText));
       const matchingTerms = new Set(
         keywords.filter((keyword) => contentTerms.has(keyword)),
       );
@@ -301,7 +301,7 @@ export async function retrieveSemanticallyRelevantChunks(
       }
 
       const contentTerms = new Set(
-        getContentQueryTerms(getEvidenceText(chunk.text)),
+        getEvidenceContentTerms(getEvidenceText(chunk.text)),
       );
       return {
         chunk: chunk.text,
@@ -383,7 +383,16 @@ export async function retrieveSemanticallyRelevantChunks(
 }
 
 export function getContentQueryTerms(text: string): string[] {
-  const normalizedText = normalizeSchedulingTerms(text);
+  return extractContentTerms(
+    normalizeSchedulingTerms(stripPresentationInstructions(text)),
+  );
+}
+
+function getEvidenceContentTerms(text: string): string[] {
+  return extractContentTerms(normalizeSchedulingTerms(text));
+}
+
+function extractContentTerms(normalizedText: string): string[] {
   return [
     ...new Set(
       normalizedText
@@ -400,6 +409,27 @@ export function getContentQueryTerms(text: string): string[] {
         ) ?? [],
     ),
   ];
+}
+
+function stripPresentationInstructions(text: string): string {
+  return text
+    .replace(
+      /\b(?:in\s+)?(?:very\s+)?(?:simple|plain)\s+(?:terms?|words?|language)\b/gi,
+      " ",
+    )
+    .replace(
+      /\bas if\s+(?:i am|i['’]m)\s+(?:learning\s+(?:it|this)\s+)?for the first time\b/gi,
+      " ",
+    )
+    .replace(
+      /\b(?:beginner[- ]friendly|for (?:a )?beginner(?:s)?|for (?:a )?first[- ]time learner)\b/gi,
+      " ",
+    )
+    .replace(
+      /\b(?:use|give|provide|include|with)\s+(?:me\s+)?(?:an?\s+)?(?:everyday|real[- ]life|familiar|concrete)\s+(?:example|analogy)\b(?:\s+to\s+help\s+me\s+understand)?/gi,
+      " ",
+    )
+    .replace(/\bhelp\s+me\s+understand\b/gi, " ");
 }
 
 function normalizeSchedulingTerms(text: string): string {

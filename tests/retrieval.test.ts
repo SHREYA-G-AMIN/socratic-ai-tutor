@@ -186,6 +186,75 @@ test("retrieval ignores question-action phrasing when selecting topic evidence",
   );
 });
 
+test("semantic retrieval separates the exact beginner question from its presentation instructions", async () => {
+  const query =
+    "Explain CPU scheduling in simple terms, as if I'm learning it for the first time. Use an everyday example to help me understand.";
+  const chunks = makeChunks([
+    "CPU scheduling selects the next process from the ready queue.",
+  ]);
+  let embeddedQuery: string | undefined;
+  const embedder = async (texts: string[], taskType: string) => {
+    if (taskType === "RETRIEVAL_QUERY") {
+      embeddedQuery = texts[0];
+      return [[1, 0]];
+    }
+
+    return texts.map(() => [1, 0]);
+  };
+
+  assert.deepEqual(getContentQueryTerms(query), ["scheduling"]);
+
+  const results = await retrieveSemanticallyRelevantChunks(chunks, query, {
+    embedder,
+    model: "test-simple-terms-retrieval-model",
+    cacheScope: "simple-terms-query",
+  });
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].chunk, chunks[0].text);
+  assert.equal(embeddedQuery, query);
+});
+
+test("direct CPU scheduling questions keep their topic terms", () => {
+  const query = "What is CPU scheduling?";
+  const chunks = makeChunks([
+    "CPU scheduling selects the next process from the ready queue.",
+  ]);
+
+  assert.deepEqual(getContentQueryTerms(query), ["scheduling"]);
+  assert.equal(retrieveRelevantChunks(chunks, query)[0]?.chunk, chunks[0].text);
+});
+
+test("beginner-friendly presentation instructions are separated for other subjects", () => {
+  const query =
+    "Explain photosynthesis in simple terms, as if I'm learning it for the first time. Use an everyday example to help me understand.";
+  const chunks = makeChunks([
+    "Photosynthesis converts light energy into chemical energy in plants.",
+  ]);
+
+  assert.deepEqual(getContentQueryTerms(query), ["photosynthesis"]);
+  assert.equal(
+    retrieveRelevantChunks(chunks, query)[0]?.chunk,
+    chunks[0].text,
+  );
+});
+
+test("learning remains a content term in a machine-learning question", () => {
+  const query = "How does machine learning improve speech recognition?";
+  const chunks = makeChunks([
+    "Machine learning can improve speech recognition.",
+  ]);
+
+  assert.deepEqual(getContentQueryTerms(query), [
+    "machine",
+    "learning",
+    "improve",
+    "speech",
+    "recognition",
+  ]);
+  assert.equal(retrieveRelevantChunks(chunks, query)[0]?.chunk, chunks[0].text);
+});
+
 test("keyword retrieval does not treat a repeated question as its own evidence", () => {
   const chunks = makeChunks([
     "Question 1\nWhy does a BST compare the target value with the current node before choosing a subtree?",

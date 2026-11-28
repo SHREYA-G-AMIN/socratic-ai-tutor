@@ -169,6 +169,28 @@ test("Gantt diagrams preserve every cited process interval and chronological ord
   );
 });
 
+test("Gantt validation accepts colon-separated process IDs and intervals", () => {
+  const passage =
+    "RR Gantt timeline: P1: 0–2, P2: 2–4, P3: 4–6.";
+  const diagram: DiagramData = {
+    ...ganttDiagram,
+    nodes: ganttDiagram.nodes.map((node) => ({
+      ...node,
+      label: node.label.replace(/^(\w+)\s+(\d+)-(\d+)$/, "$1: $2–$3"),
+      evidence: passage,
+    })),
+    edges: ganttDiagram.edges.map((edge) => ({
+      ...edge,
+      evidence: passage,
+    })),
+  };
+
+  assert.deepEqual(
+    validateGroundedDiagram(diagram, [passage], { kind: "gantt" }),
+    diagram,
+  );
+});
+
 test("Gantt diagrams reject altered process IDs, intervals, and execution order", () => {
   const constraint = { kind: "gantt" } as const;
   const alteredProcess = {
